@@ -6,4 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./apiError";
+export * from "./contractInput";
+export * from "./contractResult";
 export * from "./healthStatus";

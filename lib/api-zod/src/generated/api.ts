@@ -14,3 +14,19 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * @summary Generate an Arabic employment contract
+ */
+export const GenerateContractBody = zod.object({
+  employerName: zod.string(),
+  employeeName: zod.string(),
+  jobTitle: zod.string(),
+  monthlySalary: zod.number(),
+  startDate: zod.string(),
+  employmentType: zod.string(),
+});
+
+export const GenerateContractResponse = zod.object({
+  contract: zod.string(),
+});

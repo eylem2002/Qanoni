@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: contracts
+    description: Arabic legal contract generation
 paths:
   /healthz:
     get:
@@ -24,6 +26,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /contracts/generate:
+    post:
+      operationId: generateContract
+      tags: [contracts]
+      summary: Generate an Arabic employment contract
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContractInput"
+      responses:
+        "200":
+          description: Generated contract text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +65,39 @@ components:
           type: string
       required:
         - status
-
+    ContractInput:
+      type: object
+      properties:
+        employerName:
+          type: string
+        employeeName:
+          type: string
+        jobTitle:
+          type: string
+        monthlySalary:
+          type: number
+        startDate:
+          type: string
+        employmentType:
+          type: string
+      required:
+        - employerName
+        - employeeName
+        - jobTitle
+        - monthlySalary
+        - startDate
+        - employmentType
+    ContractResult:
+      type: object
+      properties:
+        contract:
+          type: string
+      required:
+        - contract
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error

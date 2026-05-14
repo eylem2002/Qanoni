@@ -8,3 +8,20 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface ContractInput {
+  employerName: string;
+  employeeName: string;
+  jobTitle: string;
+  monthlySalary: number;
+  startDate: string;
+  employmentType: string;
+}
+
+export interface ContractResult {
+  contract: string;
+}
+
+export interface ApiError {
+  error: string;
+}

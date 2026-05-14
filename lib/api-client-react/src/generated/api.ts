@@ -5,18 +5,26 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  ApiError,
+  ContractInput,
+  ContractResult,
+  HealthStatus,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -99,3 +107,89 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Generate an Arabic employment contract
+ */
+export const getGenerateContractUrl = () => {
+  return `/api/contracts/generate`;
+};
+
+export const generateContract = async (
+  contractInput: ContractInput,
+  options?: RequestInit,
+): Promise<ContractResult> => {
+  return customFetch<ContractResult>(getGenerateContractUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contractInput),
+  });
+};
+
+export const getGenerateContractMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateContract>>,
+    TError,
+    { data: BodyType<ContractInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateContract>>,
+  TError,
+  { data: BodyType<ContractInput> },
+  TContext
+> => {
+  const mutationKey = ["generateContract"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateContract>>,
+    { data: BodyType<ContractInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateContract(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateContractMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateContract>>
+>;
+export type GenerateContractMutationBody = BodyType<ContractInput>;
+export type GenerateContractMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Generate an Arabic employment contract
+ */
+export const useGenerateContract = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateContract>>,
+    TError,
+    { data: BodyType<ContractInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateContract>>,
+  TError,
+  { data: BodyType<ContractInput> },
+  TContext
+> => {
+  return useMutation(getGenerateContractMutationOptions(options));
+};
