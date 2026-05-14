@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useGenerateContract } from "@workspace/api-client-react";
 import { Copy, Check, FileText, Scale, FileDown } from "lucide-react";
-import jsPDF from "jspdf";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -105,38 +104,56 @@ export default function Home() {
 
   const handleDownloadPdf = () => {
     if (!generatedContract) return;
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    
-    // Use a Unicode-compatible font — jsPDF default doesn't support Arabic well,
-    // so render the contract as a structured text block with RTL awareness.
-    // Since jsPDF has limited Arabic support, write the text split by lines
-    // and use the default font, noting that for proper Arabic rendering a 
-    // production app would use a server-side PDF generator.
-    // For now, use the standard approach:
-    
-    doc.setFont("helvetica");
-    doc.setFontSize(12);
-    
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 20;
-    const maxWidth = pageWidth - margin * 2;
-    
-    const lines = doc.splitTextToSize(generatedContract, maxWidth);
-    
-    let y = 20;
-    const lineHeight = 7;
-    const pageHeight = doc.internal.pageSize.getHeight();
-    
-    for (const line of lines) {
-      if (y + lineHeight > pageHeight - margin) {
-        doc.addPage();
-        y = margin;
-      }
-      doc.text(line, pageWidth - margin, y, { align: "right" });
-      y += lineHeight;
+    const employeeName = form.getValues().employeeName || "موظف";
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const escaped = generatedContract
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>عقد عمل — ${employeeName}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      direction: rtl;
+      text-align: right;
+      padding: 40px 50px;
+      line-height: 2;
+      font-size: 13.5px;
+      color: #111;
+      background: #fff;
     }
-    
-    doc.save(`عقد_عمل_${form.getValues().employeeName || "موظف"}.pdf`);
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: inherit;
+      font-size: inherit;
+      line-height: inherit;
+    }
+    @media print {
+      body { padding: 20px 30px; }
+      @page { margin: 15mm 20mm; size: A4; }
+    }
+  </style>
+</head>
+<body>
+  <pre>${escaped}</pre>
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 400);
+    };
+  </script>
+</body>
+</html>`);
+    printWindow.document.close();
   };
 
   return (
