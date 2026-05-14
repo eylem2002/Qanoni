@@ -16,10 +16,27 @@ export interface ContractInput {
   monthlySalary: number;
   startDate: string;
   employmentType: string;
+  /** Probation period in days (30, 60, or 90) */
+  probationPeriodDays: number;
+  /** Annual leave days (14 minimum per Jordanian law) */
+  annualLeaveDays: number;
+  /** Whether employee is eligible for performance bonuses */
+  hasBonus: boolean;
+  /** Whether overtime applies per Jordanian Labor Law */
+  hasOvertime: boolean;
+  /** Any additional special conditions or clauses */
+  specialConditions?: string;
 }
 
 export interface ContractResult {
   contract: string;
+  /** Non-fatal warnings from the legal validation layer */
+  validationWarnings: string[];
+}
+
+export interface ContractValidationError {
+  error: string;
+  missingClauses: string[];
 }
 
 export interface ApiError {

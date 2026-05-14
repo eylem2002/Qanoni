@@ -50,6 +50,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "422":
+          description: Validation error - generated contract failed legal checks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractValidationError"
         "500":
           description: Server error
           content:
@@ -80,6 +86,21 @@ components:
           type: string
         employmentType:
           type: string
+        probationPeriodDays:
+          type: number
+          description: Probation period in days (30, 60, or 90)
+        annualLeaveDays:
+          type: number
+          description: Annual leave days (14 minimum per Jordanian law)
+        hasBonus:
+          type: boolean
+          description: Whether employee is eligible for performance bonuses
+        hasOvertime:
+          type: boolean
+          description: Whether overtime applies per Jordanian Labor Law
+        specialConditions:
+          type: string
+          description: Any additional special conditions or clauses
       required:
         - employerName
         - employeeName
@@ -87,13 +108,35 @@ components:
         - monthlySalary
         - startDate
         - employmentType
+        - probationPeriodDays
+        - annualLeaveDays
+        - hasBonus
+        - hasOvertime
     ContractResult:
       type: object
       properties:
         contract:
           type: string
+        validationWarnings:
+          type: array
+          items:
+            type: string
+          description: Non-fatal warnings from the legal validation layer
       required:
         - contract
+        - validationWarnings
+    ContractValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+        missingClauses:
+          type: array
+          items:
+            type: string
+      required:
+        - error
+        - missingClauses
     ApiError:
       type: object
       properties:

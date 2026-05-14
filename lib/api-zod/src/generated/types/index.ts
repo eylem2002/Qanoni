@@ -9,4 +9,5 @@
 export * from "./apiError";
 export * from "./contractInput";
 export * from "./contractResult";
+export * from "./contractValidationError";
 export * from "./healthStatus";

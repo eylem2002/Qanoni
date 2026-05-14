@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useGenerateContract } from "@workspace/api-client-react";
-import { Copy, Download, Check, FileText, Scale } from "lucide-react";
+import { Copy, Check, FileText, Scale, FileDown } from "lucide-react";
+import jsPDF from "jspdf";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +26,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 
 const formSchema = z.object({
   employerName: z.string().min(2, "الرجاء إدخال اسم صاحب العمل"),
@@ -33,6 +37,11 @@ const formSchema = z.object({
   monthlySalary: z.coerce.number().min(1, "الرجاء إدخال راتب صحيح"),
   startDate: z.string().min(2, "الرجاء إدخال تاريخ البدء"),
   employmentType: z.string().min(2, "الرجاء اختيار نوع التعاقد"),
+  probationPeriodDays: z.coerce.number(),
+  annualLeaveDays: z.coerce.number(),
+  hasBonus: z.boolean(),
+  hasOvertime: z.boolean(),
+  specialConditions: z.string().optional(),
 });
 
 export default function Home() {
@@ -49,6 +58,11 @@ export default function Home() {
       monthlySalary: 0,
       startDate: "",
       employmentType: "",
+      probationPeriodDays: 90,
+      annualLeaveDays: 14,
+      hasBonus: false,
+      hasOvertime: true,
+      specialConditions: "",
     },
   });
 
@@ -58,7 +72,9 @@ export default function Home() {
         setGeneratedContract(result.contract);
         toast({
           title: "تم توليد العقد بنجاح",
-          description: "يمكنك الآن مراجعة العقد ونسخه أو تحميله.",
+          description: result.validationWarnings && result.validationWarnings.length > 0 
+            ? `تم التوليد مع ملاحظات: ${result.validationWarnings.join("، ")}`
+            : "يمكنك الآن مراجعة العقد ونسخه أو تحميله.",
         });
       },
       onError: (error) => {
@@ -82,23 +98,45 @@ export default function Home() {
       setTimeout(() => setCopied(false), 2000);
       toast({
         title: "تم النسخ",
-        description: "تم نسخ العقد إلى الحافظة",
+        description: "تم نسخ العقد إلى الحافظة"
       });
     }
   };
 
-  const handleDownload = () => {
-    if (generatedContract) {
-      const blob = new Blob([generatedContract], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `عقد_عمل_${form.getValues().employeeName || "موظف"}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+  const handleDownloadPdf = () => {
+    if (!generatedContract) return;
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    
+    // Use a Unicode-compatible font — jsPDF default doesn't support Arabic well,
+    // so render the contract as a structured text block with RTL awareness.
+    // Since jsPDF has limited Arabic support, write the text split by lines
+    // and use the default font, noting that for proper Arabic rendering a 
+    // production app would use a server-side PDF generator.
+    // For now, use the standard approach:
+    
+    doc.setFont("helvetica");
+    doc.setFontSize(12);
+    
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 20;
+    const maxWidth = pageWidth - margin * 2;
+    
+    const lines = doc.splitTextToSize(generatedContract, maxWidth);
+    
+    let y = 20;
+    const lineHeight = 7;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    
+    for (const line of lines) {
+      if (y + lineHeight > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(line, pageWidth - margin, y, { align: "right" });
+      y += lineHeight;
     }
+    
+    doc.save(`عقد_عمل_${form.getValues().employeeName || "موظف"}.pdf`);
   };
 
   return (
@@ -226,7 +264,121 @@ export default function Home() {
                     )}
                   />
 
-                  <div className="pt-4">
+                  <div className="pt-4 pb-2">
+                    <div className="flex items-center gap-4 mb-4">
+                      <Separator className="flex-1" />
+                      <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">إعدادات متقدمة</span>
+                      <Separator className="flex-1" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <FormField
+                        control={form.control}
+                        name="probationPeriodDays"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-semibold text-gray-200">فترة التجربة (أيام)</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={String(field.value)}>
+                              <FormControl>
+                                <SelectTrigger className="h-12 bg-background/50 focus:bg-background border-border/60">
+                                  <SelectValue placeholder="اختر فترة التجربة..." />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="30">30</SelectItem>
+                                <SelectItem value="60">60</SelectItem>
+                                <SelectItem value="90">90</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="annualLeaveDays"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-semibold text-gray-200">أيام الإجازة السنوية</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={String(field.value)}>
+                              <FormControl>
+                                <SelectTrigger className="h-12 bg-background/50 focus:bg-background border-border/60">
+                                  <SelectValue placeholder="اختر الإجازة..." />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="14">14 (الحد الأدنى القانوني)</SelectItem>
+                                <SelectItem value="21">21</SelectItem>
+                                <SelectItem value="25">25</SelectItem>
+                                <SelectItem value="30">30</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <FormField
+                        control={form.control}
+                        name="hasBonus"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border border-border/60 bg-background/50 p-4 h-[72px]">
+                            <div className="space-y-0.5">
+                              <FormLabel className="text-sm font-semibold text-gray-200">مكافأة الأداء</FormLabel>
+                              <div className="text-xs text-muted-foreground">{field.value ? "نعم، مشمولة" : "لا"}</div>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="hasOvertime"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border border-border/60 bg-background/50 p-4 h-[72px]">
+                            <div className="space-y-0.5">
+                              <FormLabel className="text-sm font-semibold text-gray-200">العمل الإضافي</FormLabel>
+                              <div className="text-xs text-muted-foreground">{field.value ? "نعم، وفق القانون" : "لا"}</div>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="specialConditions"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-semibold text-gray-200">شروط خاصة إضافية (اختياري)</FormLabel>
+                          <FormControl>
+                            <Textarea 
+                              className="resize-none bg-background/50 focus:bg-background border-border/60" 
+                              placeholder="أي شروط أو بنود إضافية..." 
+                              rows={3}
+                              {...field} 
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="pt-2">
                     <Button 
                       type="submit" 
                       className="w-full h-14 text-lg font-bold shadow-[0_4px_14px_rgba(212,175,55,0.2)] hover:shadow-[0_6px_20px_rgba(212,175,55,0.3)] transition-all" 
@@ -261,9 +413,9 @@ export default function Home() {
                     {copied ? <Check className="w-4 h-4 ml-2 text-green-500" /> : <Copy className="w-4 h-4 ml-2 text-gray-300" />}
                     {copied ? "تم النسخ" : "نسخ النص"}
                   </Button>
-                  <Button variant="default" size="sm" onClick={handleDownload} className="h-10 px-4 shadow-md">
-                    <Download className="w-4 h-4 ml-2" />
-                    تحميل
+                  <Button variant="default" size="sm" onClick={handleDownloadPdf} className="h-10 px-4 shadow-md">
+                    <FileDown className="w-4 h-4 ml-2" />
+                    تحميل PDF
                   </Button>
                 </div>
               )}

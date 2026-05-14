@@ -8,4 +8,6 @@
 
 export interface ContractResult {
   contract: string;
+  /** Non-fatal warnings from the legal validation layer */
+  validationWarnings: string[];
 }

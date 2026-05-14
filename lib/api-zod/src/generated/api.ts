@@ -25,8 +25,27 @@ export const GenerateContractBody = zod.object({
   monthlySalary: zod.number(),
   startDate: zod.string(),
   employmentType: zod.string(),
+  probationPeriodDays: zod
+    .number()
+    .describe("Probation period in days (30, 60, or 90)"),
+  annualLeaveDays: zod
+    .number()
+    .describe("Annual leave days (14 minimum per Jordanian law)"),
+  hasBonus: zod
+    .boolean()
+    .describe("Whether employee is eligible for performance bonuses"),
+  hasOvertime: zod
+    .boolean()
+    .describe("Whether overtime applies per Jordanian Labor Law"),
+  specialConditions: zod
+    .string()
+    .optional()
+    .describe("Any additional special conditions or clauses"),
 });
 
 export const GenerateContractResponse = zod.object({
   contract: zod.string(),
+  validationWarnings: zod
+    .array(zod.string())
+    .describe("Non-fatal warnings from the legal validation layer"),
 });

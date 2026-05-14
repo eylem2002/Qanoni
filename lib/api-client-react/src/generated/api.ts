@@ -20,6 +20,7 @@ import type {
   ApiError,
   ContractInput,
   ContractResult,
+  ContractValidationError,
   HealthStatus,
 } from "./api.schemas";
 
@@ -128,7 +129,7 @@ export const generateContract = async (
 };
 
 export const getGenerateContractMutationOptions = <
-  TError = ErrorType<ApiError>,
+  TError = ErrorType<ApiError | ContractValidationError>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -169,13 +170,15 @@ export type GenerateContractMutationResult = NonNullable<
   Awaited<ReturnType<typeof generateContract>>
 >;
 export type GenerateContractMutationBody = BodyType<ContractInput>;
-export type GenerateContractMutationError = ErrorType<ApiError>;
+export type GenerateContractMutationError = ErrorType<
+  ApiError | ContractValidationError
+>;
 
 /**
  * @summary Generate an Arabic employment contract
  */
 export const useGenerateContract = <
-  TError = ErrorType<ApiError>,
+  TError = ErrorType<ApiError | ContractValidationError>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
