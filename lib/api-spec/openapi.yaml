@@ -76,42 +76,80 @@ components:
       properties:
         employerName:
           type: string
+          description: اسم صاحب العمل
+        employerRegistrationNumber:
+          type: string
+          description: رقم التسجيل التجاري لصاحب العمل (اختياري)
         employeeName:
           type: string
+          description: اسم الموظف
+        employeeId:
+          type: string
+          description: رقم الهوية الوطنية أو جواز السفر للموظف
         jobTitle:
           type: string
+          description: المسمى الوظيفي
+        department:
+          type: string
+          description: القسم أو الإدارة (اختياري)
+        directManager:
+          type: string
+          description: اسم المشرف المباشر (اختياري)
         monthlySalary:
           type: number
+          description: الراتب الشهري بالدينار الأردني
         startDate:
           type: string
+          description: تاريخ بدء العمل
         employmentType:
           type: string
+          description: نوع عقد العمل
         probationPeriodDays:
           type: number
-          description: Probation period in days (30, 60, or 90)
+          description: فترة التجربة بالأيام (0 أو 30 أو 60 أو 90 كحد أقصى)
+        noticePeriod:
+          type: string
+          description: فترة الإشعار المطلوبة لإنهاء العقد
         annualLeaveDays:
           type: number
-          description: Annual leave days (14 minimum per Jordanian law)
+          description: أيام الإجازة السنوية (14 كحد أدنى قانوني)
         hasBonus:
           type: boolean
-          description: Whether employee is eligible for performance bonuses
+          description: هل يستحق الموظف مكافأة أداء سنوية
         hasOvertime:
           type: boolean
-          description: Whether overtime applies per Jordanian Labor Law
+          description: هل ينطبق نظام العمل الإضافي
+        benefits:
+          type: array
+          items:
+            type: string
+          description: قائمة المزايا والتأمينات المشمولة في العقد
+        hasConfidentialityClause:
+          type: boolean
+          description: هل يتضمن العقد بند السرية وحفظ أسرار العمل
+        ipRights:
+          type: string
+          description: ملكية حقوق الملكية الفكرية للأعمال المنجزة
+        workLocation:
+          type: string
+          description: مكان أو نمط العمل (حضوري، عن بعد، هجين)
         specialConditions:
           type: string
-          description: Any additional special conditions or clauses
+          description: أي بنود أو شروط خاصة إضافية
       required:
         - employerName
         - employeeName
+        - employeeId
         - jobTitle
         - monthlySalary
         - startDate
         - employmentType
         - probationPeriodDays
+        - noticePeriod
         - annualLeaveDays
         - hasBonus
         - hasOvertime
+        - hasConfidentialityClause
     ContractResult:
       type: object
       properties:

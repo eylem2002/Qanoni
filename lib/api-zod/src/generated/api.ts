@@ -19,28 +19,50 @@ export const HealthCheckResponse = zod.object({
  * @summary Generate an Arabic employment contract
  */
 export const GenerateContractBody = zod.object({
-  employerName: zod.string(),
-  employeeName: zod.string(),
-  jobTitle: zod.string(),
-  monthlySalary: zod.number(),
-  startDate: zod.string(),
-  employmentType: zod.string(),
+  employerName: zod.string().describe("اسم صاحب العمل"),
+  employerRegistrationNumber: zod
+    .string()
+    .optional()
+    .describe("رقم التسجيل التجاري لصاحب العمل (اختياري)"),
+  employeeName: zod.string().describe("اسم الموظف"),
+  employeeId: zod.string().describe("رقم الهوية الوطنية أو جواز السفر للموظف"),
+  jobTitle: zod.string().describe("المسمى الوظيفي"),
+  department: zod.string().optional().describe("القسم أو الإدارة (اختياري)"),
+  directManager: zod
+    .string()
+    .optional()
+    .describe("اسم المشرف المباشر (اختياري)"),
+  monthlySalary: zod.number().describe("الراتب الشهري بالدينار الأردني"),
+  startDate: zod.string().describe("تاريخ بدء العمل"),
+  employmentType: zod.string().describe("نوع عقد العمل"),
   probationPeriodDays: zod
     .number()
-    .describe("Probation period in days (30, 60, or 90)"),
+    .describe("فترة التجربة بالأيام (0 أو 30 أو 60 أو 90 كحد أقصى)"),
+  noticePeriod: zod.string().describe("فترة الإشعار المطلوبة لإنهاء العقد"),
   annualLeaveDays: zod
     .number()
-    .describe("Annual leave days (14 minimum per Jordanian law)"),
-  hasBonus: zod
+    .describe("أيام الإجازة السنوية (14 كحد أدنى قانوني)"),
+  hasBonus: zod.boolean().describe("هل يستحق الموظف مكافأة أداء سنوية"),
+  hasOvertime: zod.boolean().describe("هل ينطبق نظام العمل الإضافي"),
+  benefits: zod
+    .array(zod.string())
+    .optional()
+    .describe("قائمة المزايا والتأمينات المشمولة في العقد"),
+  hasConfidentialityClause: zod
     .boolean()
-    .describe("Whether employee is eligible for performance bonuses"),
-  hasOvertime: zod
-    .boolean()
-    .describe("Whether overtime applies per Jordanian Labor Law"),
+    .describe("هل يتضمن العقد بند السرية وحفظ أسرار العمل"),
+  ipRights: zod
+    .string()
+    .optional()
+    .describe("ملكية حقوق الملكية الفكرية للأعمال المنجزة"),
+  workLocation: zod
+    .string()
+    .optional()
+    .describe("مكان أو نمط العمل (حضوري، عن بعد، هجين)"),
   specialConditions: zod
     .string()
     .optional()
-    .describe("Any additional special conditions or clauses"),
+    .describe("أي بنود أو شروط خاصة إضافية"),
 });
 
 export const GenerateContractResponse = zod.object({

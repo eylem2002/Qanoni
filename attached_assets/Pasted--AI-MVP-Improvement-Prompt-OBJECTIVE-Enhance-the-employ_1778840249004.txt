@@ -1,0 +1,596 @@
+# 🔧 قالونيAI - MVP Improvement Prompt
+
+## **OBJECTIVE**
+Enhance the employment contract generation form to include all required Jordanian Labor Law fields and create a competitive advantage over international competitors.
+
+---
+
+## **PHASE 1: CRITICAL ADDITIONS (PRIORITY 1) - IMPLEMENT FIRST**
+
+### **Add These Fields to Your Form (Week 1-2)**
+
+#### **1. Employee ID / Passport Number**
+```
+Field Name: رقم الهوية / جواز السفر (Employee ID / Passport)
+Type: Text Input
+Required: YES (mandatory per Article 15 of Labor Law)
+Placeholder: "123456789"
+Help Text: "رقم الهوية الوطنية أو رقم جواز السفر للعاملين غير الأردنيين"
+Jordanian Law Reference: Article 15 - عقود العمل يجب أن تتضمن بيانات الهوية
+Validation: 
+  - Min 6 characters
+  - Max 20 characters
+  - Can be numeric only
+Position: After "اسم الموظف" field
+```
+
+#### **2. Employer Registration Number (رقم التسجيل)**
+```
+Field Name: رقم التسجيل التجاري (Company Registration Number)
+Type: Text Input
+Required: YES (mandatory per Article 8 of Labor Law)
+Placeholder: "12345678"
+Help Text: "رقم التسجيل التجاري للشركة لدى وزارة الصناعة والتجارة"
+Jordanian Law Reference: Article 8 - صاحب العمل يجب أن يرسل إشعار يتضمن بيانات الشركة
+Validation:
+  - Numeric only
+  - 8 digits typically for Jordan
+Position: After "اسم صاحب العمل" field
+```
+
+#### **3. Probation Period (فترة التجربة)**
+```
+Field Name: فترة التجربة (Probation Period)
+Type: Number Input with Dropdown
+Required: NO (optional - only if applicable)
+Options:
+  - "بدون فترة تجربة" (No probation)
+  - "30 يوم" (30 days)
+  - "60 يوم" (60 days)
+  - "90 يوم" (90 days) - DEFAULT/RECOMMENDED
+  - "مخصص" (Custom)
+Help Text: "لا تزيد على 3 أشهر بموجب المادة 35 من قانون العمل"
+Jordanian Law Reference: Article 35 - فترة التجربة لا تزيد على ثلاثة أشهر
+Validation:
+  - Max 90 days
+  - Must be positive number
+Position: After "نوع العقد" field
+```
+
+#### **4. Notice Period (فترة الإشعار)**
+```
+Field Name: فترة الإشعار (Notice Period)
+Type: Dropdown
+Required: YES
+Default Value: "شهر واحد" (1 month)
+Options:
+  - "أسبوع واحد" (1 week)
+  - "شهر واحد" (1 month) - DEFAULT (Article 23)
+  - "شهرين" (2 months)
+  - "مخصص" (Custom)
+Help Text: "الحد الأدنى شهر واحد بموجب المادة 23 من قانون العمل"
+Jordanian Law Reference: Article 23 - إشعار خطي قبل شهر واحد على الأقل
+Position: After "نوع العقد" field (after Probation Period)
+Display in Contract: 
+  - "يترتب على أي من الطرفين إخطار الطرف الآخر خطياً برغبته في إنهاء العقد قبل [فترة الإشعار] على الأقل"
+```
+
+#### **5. Add Law References to Contract Output**
+```
+When generating contract, automatically include:
+
+Article 23 Reference:
+"بموجب المادة 23 من قانون العمل الأردني رقم 8 لسنة 1996"
+
+Article 35 Reference (if probation exists):
+"بموجب المادة 35 من قانون العمل الأردني رقم 8 لسنة 1996"
+
+Article 28 Reference (termination):
+"بموجب المادة 28 من قانون العمل الأردني رقم 8 لسنة 1996"
+```
+
+---
+
+## **PHASE 2: HIGH PRIORITY FEATURES (ADD NEXT) - WEEK 3-4**
+
+### **Department & Reporting Line (الإدارة والمشرف)**
+```
+Field Name: قسم / إدارة (Department)
+Type: Text Input
+Required: NO
+Placeholder: "هندسة البرمجيات" / "الموارد البشرية"
+Help Text: "القسم أو الإدارة التي يعمل بها الموظف"
+Position: After "المسمى الوظيفي" field
+
+Field Name: المشرف المباشر (Direct Manager/Supervisor)
+Type: Text Input
+Required: NO
+Placeholder: "اسم المشرف"
+Help Text: "اسم الشخص المسؤول مباشرة عن الموظف"
+Position: After Department field
+```
+
+### **Bonuses & Commissions (المكافآت والعمولات)**
+```
+Field Name: هل يوجد مكافآت/عمولات؟ (Has Bonuses/Commissions?)
+Type: Toggle/Checkbox
+Display Logic: Shows additional fields if YES
+
+If YES, show:
+- Amount: "مبلغ المكافأة/العمولة" (Text/Number)
+- Frequency: "التكرار" (Dropdown: Monthly/Quarterly/Annually)
+- Conditions: "شروط الحصول عليها" (Text area)
+
+Example Output in Contract:
+"بالإضافة إلى الراتب الأساسي، يستحق الموظف [مبلغ] كمكافأة [التكرار] بناءً على [الشروط]"
+```
+
+### **Benefits Package (المزايا والتأمينات)**
+```
+Field Name: المزايا والتأمينات (Benefits Package)
+Type: Checkboxes (Multi-select)
+Options:
+  ☑ تأمين صحي (Health Insurance)
+  ☑ تأمين اجتماعي (Social Security) - REQUIRED by law
+  ☑ صندوق ادخار (Savings Fund)
+  ☑ صندوق تقاعد (Pension Fund)
+  ☑ بدل سكن (Housing Allowance)
+  ☑ بدل مواصلات (Transportation Allowance)
+  ☑ بدل غلاء المعيشة (Cost of Living Allowance)
+  ☑ تذاكر سفر للعطلة (Flight Tickets for Vacation)
+  ☑ مخصص (Custom)
+
+If Custom selected, show text input: "أخرى: ___________"
+
+Jordanian Law Reference: Article 33 - صناديق الادخار والتقاعد
+```
+
+### **Confidentiality Clause (بند السرية)**
+```
+Field Name: هل توجد شروط سرية؟ (Include Confidentiality Clause?)
+Type: Checkbox
+Required: NO
+Default: CHECKED (recommended)
+
+If Checked, add to contract:
+"يلتزم الموظف بالحفاظ على أسرار صاحب العمل الصناعية والتجارية وألا يفشيها 
+بأي صورة من الصور ولو بعد انقضاء عقد العمل"
+
+Jordanian Law Reference: Article 19 - المحافظة على أسرار صاحب العمل
+```
+
+### **IP Rights Ownership (حقوق الملكية الفكرية)**
+```
+Field Name: حقوق الملكية الفكرية (IP Rights)
+Type: Dropdown
+Options:
+  - "لصاحب العمل" (Employer owns all IP)
+  - "للموظف" (Employee owns all IP)
+  - "مشتركة" (Shared ownership)
+  - "كما هو محدد في القانون" (As per Law Article 20)
+
+Display in Contract:
+"تحدد حقوق الملكية الفكرية بموجب المادة 20 من قانون العمل الأردني"
+
+Jordanian Law Reference: Article 20 - حقوق الملكية الفكرية للعامل
+```
+
+---
+
+## **PHASE 3: MEDIUM PRIORITY FEATURES (ADD LATER) - WEEK 5-6**
+
+### **Optional Fields to Add**
+
+#### **Work Schedule Flexibility**
+```
+Field Name: نمط العمل (Work Schedule)
+Type: Dropdown
+Options:
+  - عمل دوام كامل (Full-time)
+  - عمل جزئي (Part-time)
+  - عمل مرن (Flexible)
+  - عمل عن بعد (Remote)
+  - هجين (Hybrid)
+
+If selected, add details:
+- "أيام العمل" (Working days)
+- "ساعات العمل" (Hours per day) - Default: 8 per Article 56
+```
+
+#### **Remote Work Policy**
+```
+Field Name: إمكانية العمل من البيت (Remote Work Allowed?)
+Type: Checkbox
+If YES:
+  - "عدد أيام العمل من البيت" (Days per week)
+  - "الشروط والضوابط" (Conditions - Text area)
+```
+
+#### **Equipment & Tools Provided**
+```
+Field Name: المعدات والأدوات المزودة (Equipment Provided)
+Type: Text Area
+Placeholder: "جهاز كمبيوتر، هاتف ذكي، برامج خاصة..."
+Help Text: "اذكر ما يوفره صاحب العمل من معدات للموظف"
+```
+
+---
+
+## **PHASE 4: FORM VALIDATION & LEGAL COMPLIANCE**
+
+### **Add Validation Rules**
+
+```javascript
+VALIDATION CHECKLIST:
+
+☐ Employee ID: 
+   - Cannot be empty
+   - Min 6 chars, Max 20
+   - Display warning if same as previous
+
+☐ Employer Registration:
+   - Cannot be empty
+   - Must be 8 digits (for Jordan)
+   - Validate against format
+
+☐ Probation Period:
+   - Cannot exceed 90 days
+   - If 0, remove probation clause from contract
+
+☐ Notice Period:
+   - Cannot be empty (default 1 month)
+   - Display warning if less than 1 month
+
+☐ Salary:
+   - Must be >= Minimum wage (set current rate)
+   - Display warning if below minimum
+
+☐ Working Hours:
+   - Default 8 (Article 56)
+   - Warning if > 8 (add overtime section)
+   - Warning if < 8
+
+☐ Contract Duration:
+   - If fixed-term: must have end date
+   - If indefinite: allow termination by notice
+
+☐ All dates in dd/mm/yyyy format
+```
+
+---
+
+## **PHASE 5: CONTRACT OUTPUT IMPROVEMENTS**
+
+### **Enhanced Contract Template Structure**
+
+```
+الجزء الأول: بيانات الطرفين
+├─ بيانات صاحب العمل
+│  ├─ الاسم والتسجيل التجاري
+│  └─ رقم الترخيص
+└─ بيانات الموظف
+   ├─ الاسم ورقم الهوية
+   └─ المسمى الوظيفي والقسم
+
+الجزء الثاني: شروط العقد
+├─ نوع العقد (محدد المدة / غير محدد)
+├─ فترة التجربة (إن وجدت)
+├─ تاريخ البدء والانتهاء (إن انطبق)
+└─ ساعات العمل ومكان العمل
+
+الجزء الثالث: الراتب والمزايا
+├─ الراتب الأساسي
+├─ المكافآت والعمولات
+├─ بدل الإقامة والمواصلات
+└─ التأمينات والمزايا الأخرى
+
+الجزء الرابع: الحقوق والالتزامات
+├─ الإجازات (14 يوم سنوي)
+├─ الإجازة المرضية (14 يوم)
+├─ شروط السرية والسلوك
+└─ حقوق الملكية الفكرية
+
+الجزء الخامس: الإنهاء والشروط النهائية
+├─ فترة الإشعار (شهر واحد)
+├─ أسباب الفصل (Article 28)
+├─ مكافأة نهاية الخدمة
+└─ الأحكام العامة
+
+المراجع القانونية:
+└─ المواد: 15, 23, 28, 32, 35, 43, 56 (قانون العمل الأردني)
+```
+
+---
+
+## **PHASE 6: USER EXPERIENCE IMPROVEMENTS**
+
+### **Add Help Tooltips for Every Field**
+```
+Each field should have:
+- ℹ️ Information icon
+- Hover tooltip explaining:
+  * What this field is for
+  * Legal requirement reference (if any)
+  * Example value
+  * Consequences of incorrect entry
+
+Example:
+"رقم الهوية"
+ℹ️ Hover shows:
+"رقم الهوية الوطنية (9 أرقام) أو جواز السفر للعاملين غير الأردنيين
+مثال: 123456789
+مطلوب بموجب المادة 15 من قانون العمل
+"
+```
+
+### **Add Form Sections/Tabs**
+```
+Organize form into logical sections:
+
+📋 بيانات العام (General Info)
+└─ Employee ID, Employer Name, Job Title
+
+💼 شروط العمل (Employment Terms)
+└─ Contract type, Probation, Notice Period, Duration
+
+💰 الراتب والمزايا (Compensation & Benefits)
+└─ Salary, Bonuses, Benefits, Allowances
+
+⚖️ الحقوق والواجبات (Rights & Obligations)
+└─ Confidentiality, IP Rights, Special Terms
+
+🔄 شروط الإنهاء (Termination)
+└─ Notice Period, Severance, Dispute Resolution
+```
+
+---
+
+## **PHASE 7: LEGAL COMPLIANCE CHECKLIST**
+
+### **Before Generating Contract, Validate:**
+
+```
+Pre-generation checklist:
+
+Legal Fields Check:
+☐ Employee ID/Passport present
+☐ Employer registration number present
+☐ Job title clearly defined
+☐ Salary = or > Minimum wage (Article 45)
+☐ Working hours = 8 (or noted if different per Article 56)
+
+Jordanian Law Compliance:
+☐ Annual leave = 14 days minimum (Article 35)
+☐ Sick leave = 14 days (Article 44)
+☐ Probation period <= 90 days (Article 35)
+☐ Notice period >= 1 month (Article 23)
+☐ Social security mentioned (Article 33)
+☐ Termination clauses per Article 28
+☐ End-of-service gratuity mentioned (Article 32)
+
+Warning Flags:
+🚩 If salary < minimum wage → WARN user
+🚩 If working hours > 8 → ADD overtime clause
+🚩 If probation > 90 → ERROR (not allowed)
+🚩 If notice period < 1 month → ERROR (illegal)
+🚩 If employee is woman in 6th month of pregnancy → WARN cannot terminate (Article 27)
+
+Pass all checks → Generate contract
+Fail checks → Show error + suggest corrections
+```
+
+---
+
+## **PHASE 8: TESTING REQUIREMENTS**
+
+### **Test Cases to Implement**
+
+```
+TEST SCENARIOS:
+
+Test 1: Minimum viable contract
+Inputs: Name, Company, Job, Salary, Start Date
+Expected: Contract generated with all default legal terms
+
+Test 2: Female employee in probation
+Inputs: + Gender = Female, Probation = 60 days
+Expected: Contract includes maternity leave clause (Article 46)
+
+Test 3: High salary with bonus
+Inputs: + Bonus = 20%, Commission structure
+Expected: Contract breaks down base + bonus + commission separately
+
+Test 4: Illegal notice period
+Inputs: Notice Period = 1 week
+Expected: ERROR message + suggest 1 month
+
+Test 5: Illegal probation
+Inputs: Probation = 120 days
+Expected: ERROR message + suggest max 90 days
+
+Test 6: Non-Jordanian worker
+Inputs: + Nationality = Non-Jordanian
+Expected: Add work permit reference (Article 12)
+
+Test 7: Remote work addition
+Inputs: + Remote work = YES, 2 days/week
+Expected: Contract includes remote work terms
+
+Test 8: PDF generation
+All inputs filled
+Expected: Download contract as PDF with proper formatting
+```
+
+---
+
+## **DELIVERABLES CHECKLIST**
+
+### **End of Each Phase:**
+
+```
+PHASE 1 DELIVERABLES:
+☐ Employee ID field added + validated
+☐ Employer registration field added + validated
+☐ Probation period field added + validated
+☐ Notice period field added with defaults
+☐ Law references automatically inserted in contract
+☐ Form tested with 3 sample contracts
+☐ Deploy to Replit/production
+
+PHASE 2 DELIVERABLES:
+☐ Department field added
+☐ Manager field added
+☐ Bonuses toggle + fields added
+☐ Benefits multi-select added
+☐ Confidentiality clause toggle added
+☐ IP Rights dropdown added
+☐ Contract template updated
+☐ All tooltips added
+☐ Form reorganized into sections
+☐ Deploy v1.2
+
+PHASE 3 DELIVERABLES:
+☐ Work schedule flexibility added
+☐ Remote work policy options added
+☐ Equipment tracking field added
+☐ Optional custom fields support
+☐ Deploy v1.3
+
+PHASE 4 DELIVERABLES:
+☐ Full validation suite implemented
+☐ Warning system for illegal terms
+☐ Minimum wage enforcement
+☐ Deploy v1.4
+
+PHASE 5 DELIVERABLES:
+☐ Enhanced contract template
+☐ Proper section organization
+☐ Legal reference database
+☐ Deploy v1.5
+
+PHASE 6 DELIVERABLES:
+☐ Help tooltips on all fields
+☐ Form UI reorganized
+☐ Better user guidance
+☐ Deploy v1.6
+
+PHASE 7 DELIVERABLES:
+☐ Pre-generation legal checklist
+☐ Compliance warnings
+☐ Error prevention
+☐ Deploy v1.7
+
+PHASE 8 DELIVERABLES:
+☐ All test cases passed
+☐ Documentation updated
+☐ Ready for lawyer beta testing
+☐ Deploy v2.0 beta
+```
+
+---
+
+## **SUCCESS METRICS**
+
+```
+After Implementation:
+
+✅ Form should have 20+ fields (currently 8)
+✅ All Jordanian Labor Law articles referenced
+✅ 0 illegal contracts generated
+✅ Lawyers report 5x faster than manual writing
+✅ 100% compliance with Article 15 (documentation)
+✅ All 14,000 Jordanian lawyers can use it
+✅ Ready for WhatsApp bot integration
+✅ Can be commercialized ($5-10/contract or $50/month subscription)
+```
+
+---
+
+## **IMPLEMENTATION NOTES**
+
+### **Code Structure Suggestion**
+```
+If using React:
+components/
+├─ EmploymentContractForm/
+│  ├─ GeneralInfoSection.jsx
+│  ├─ EmploymentTermsSection.jsx
+│  ├─ CompensationSection.jsx
+│  ├─ RightsObligation Section.jsx
+│  ├─ TerminationSection.jsx
+│  └─ FormValidator.jsx
+├─ ContractGenerator/
+│  ├─ TemplateBuilder.jsx
+│  └─ LegalReferenceDatabase.jsx
+└─ ContractPreview.jsx
+
+utils/
+├─ jordanianLawRules.js
+├─ validation.js
+├─ minWageCalculator.js
+└─ articleReferences.js
+
+data/
+├─ minimumWage2026.json
+├─ jobTitles.json
+└─ lawArticles.json
+```
+
+---
+
+## **QUICK WINS (Do First)**
+
+```
+🎯 QUICK WINS - Can do in 1-2 days:
+
+1. Add Employee ID field → 30 minutes
+2. Add Employer Registration field → 30 minutes
+3. Add Probation Period dropdown → 30 minutes
+4. Add Notice Period with default → 30 minutes
+5. Update contract template to include these → 1 hour
+6. Add Article references (23, 35) → 30 minutes
+7. Test with 3 sample contracts → 1 hour
+8. Deploy to Replit → 30 minutes
+
+Total: 1-2 days for PHASE 1
+
+This alone will make your MVP 50% better and legally compliant!
+```
+
+---
+
+## **COMPETITIVE ADVANTAGE AFTER IMPLEMENTATION**
+
+```
+BEFORE (Current MVP):
+- 8 fields
+- No legal references
+- Missing critical info
+- 50% complete
+
+AFTER Phase 1 (1-2 weeks):
+- 12 fields + legal references
+- Jordanian Labor Law compliant
+- Covers all required articles
+- 80% feature complete
+- READY FOR LAWYER BETA TESTING
+
+AFTER Phase 2 (4 weeks):
+- 20+ fields
+- Full Jordanian law compliance
+- Benefits/compensation fully covered
+- IP rights protection
+- 95% feature complete
+- READY FOR COMMERCIAL USE
+- **CAN START CHARGING**
+
+COMPETITIVE POSITIONING:
+"قالونيAI - The ONLY AI that generates legally compliant 
+employment contracts under Jordanian Labor Law. 
+Faster than Harvey AI. Cheaper than Rocket Lawyer. 
+Built FOR Jordanian lawyers BY understanding Jordan law."
+```
+
+---
+
+**Ready to implement? Start with Phase 1 (Employee ID + Employer Registration + Probation + Notice Period). Takes 1-2 days, gives you 50% improvement! 🚀**

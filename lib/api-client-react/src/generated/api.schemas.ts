@@ -10,21 +10,45 @@ export interface HealthStatus {
 }
 
 export interface ContractInput {
+  /** اسم صاحب العمل */
   employerName: string;
+  /** رقم التسجيل التجاري لصاحب العمل (اختياري) */
+  employerRegistrationNumber?: string;
+  /** اسم الموظف */
   employeeName: string;
+  /** رقم الهوية الوطنية أو جواز السفر للموظف */
+  employeeId: string;
+  /** المسمى الوظيفي */
   jobTitle: string;
+  /** القسم أو الإدارة (اختياري) */
+  department?: string;
+  /** اسم المشرف المباشر (اختياري) */
+  directManager?: string;
+  /** الراتب الشهري بالدينار الأردني */
   monthlySalary: number;
+  /** تاريخ بدء العمل */
   startDate: string;
+  /** نوع عقد العمل */
   employmentType: string;
-  /** Probation period in days (30, 60, or 90) */
+  /** فترة التجربة بالأيام (0 أو 30 أو 60 أو 90 كحد أقصى) */
   probationPeriodDays: number;
-  /** Annual leave days (14 minimum per Jordanian law) */
+  /** فترة الإشعار المطلوبة لإنهاء العقد */
+  noticePeriod: string;
+  /** أيام الإجازة السنوية (14 كحد أدنى قانوني) */
   annualLeaveDays: number;
-  /** Whether employee is eligible for performance bonuses */
+  /** هل يستحق الموظف مكافأة أداء سنوية */
   hasBonus: boolean;
-  /** Whether overtime applies per Jordanian Labor Law */
+  /** هل ينطبق نظام العمل الإضافي */
   hasOvertime: boolean;
-  /** Any additional special conditions or clauses */
+  /** قائمة المزايا والتأمينات المشمولة في العقد */
+  benefits?: string[];
+  /** هل يتضمن العقد بند السرية وحفظ أسرار العمل */
+  hasConfidentialityClause: boolean;
+  /** ملكية حقوق الملكية الفكرية للأعمال المنجزة */
+  ipRights?: string;
+  /** مكان أو نمط العمل (حضوري، عن بعد، هجين) */
+  workLocation?: string;
+  /** أي بنود أو شروط خاصة إضافية */
   specialConditions?: string;
 }
 

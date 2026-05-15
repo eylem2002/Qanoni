@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useGenerateContract } from "@workspace/api-client-react";
-import { Copy, Check, FileText, Scale, FileDown } from "lucide-react";
+import { Copy, Check, FileText, Scale, FileDown, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -28,55 +28,108 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
+
+const MIN_WAGE = 290;
+
+const BENEFITS_OPTIONS = [
+  { id: "تأمين اجتماعي", label: "تأمين اجتماعي (إلزامي قانوناً)" },
+  { id: "تأمين صحي", label: "تأمين صحي" },
+  { id: "بدل مواصلات", label: "بدل مواصلات" },
+  { id: "بدل سكن", label: "بدل سكن" },
+  { id: "بدل غلاء معيشة", label: "بدل غلاء معيشة" },
+  { id: "صندوق ادخار", label: "صندوق ادخار" },
+  { id: "صندوق تقاعد", label: "صندوق تقاعد" },
+  { id: "تذاكر سفر للإجازة", label: "تذاكر سفر للإجازة" },
+];
 
 const formSchema = z.object({
   employerName: z.string().min(2, "الرجاء إدخال اسم صاحب العمل"),
+  employerRegistrationNumber: z.string().optional(),
   employeeName: z.string().min(2, "الرجاء إدخال اسم الموظف"),
+  employeeId: z.string().min(6, "رقم الهوية يجب أن يكون 6 أحرف على الأقل").max(20),
   jobTitle: z.string().min(2, "الرجاء إدخال المسمى الوظيفي"),
+  department: z.string().optional(),
+  directManager: z.string().optional(),
   monthlySalary: z.coerce.number().min(1, "الرجاء إدخال راتب صحيح"),
   startDate: z.string().min(2, "الرجاء إدخال تاريخ البدء"),
   employmentType: z.string().min(2, "الرجاء اختيار نوع التعاقد"),
   probationPeriodDays: z.coerce.number(),
+  noticePeriod: z.string().min(1, "الرجاء اختيار فترة الإشعار"),
   annualLeaveDays: z.coerce.number(),
   hasBonus: z.boolean(),
   hasOvertime: z.boolean(),
+  benefits: z.array(z.string()),
+  hasConfidentialityClause: z.boolean(),
+  ipRights: z.string().optional(),
+  workLocation: z.string().optional(),
   specialConditions: z.string().optional(),
 });
+
+type FormValues = z.infer<typeof formSchema>;
+
+function SectionHeader({ number, title }: { number: string; title: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-5">
+      <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+        {number}
+      </div>
+      <span className="text-sm font-bold text-primary/90 uppercase tracking-widest">{title}</span>
+      <div className="flex-1 h-px bg-border/40" />
+    </div>
+  );
+}
 
 export default function Home() {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [generatedContract, setGeneratedContract] = useState<string | null>(null);
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       employerName: "",
+      employerRegistrationNumber: "",
       employeeName: "",
+      employeeId: "",
       jobTitle: "",
+      department: "",
+      directManager: "",
       monthlySalary: 0,
       startDate: "",
       employmentType: "",
       probationPeriodDays: 90,
+      noticePeriod: "شهر واحد",
       annualLeaveDays: 14,
       hasBonus: false,
       hasOvertime: true,
+      benefits: ["تأمين اجتماعي"],
+      hasConfidentialityClause: true,
+      ipRights: "",
+      workLocation: "",
       specialConditions: "",
     },
   });
+
+  const salary = form.watch("monthlySalary");
+  const belowMinWage = salary > 0 && salary < MIN_WAGE;
 
   const { mutate, isPending } = useGenerateContract({
     mutation: {
       onSuccess: (result) => {
         setGeneratedContract(result.contract);
+        setValidationWarnings(result.validationWarnings ?? []);
         toast({
           title: "تم توليد العقد بنجاح",
-          description: result.validationWarnings && result.validationWarnings.length > 0 
-            ? `تم التوليد مع ملاحظات: ${result.validationWarnings.join("، ")}`
-            : "يمكنك الآن مراجعة العقد ونسخه أو تحميله.",
+          description:
+            result.validationWarnings && result.validationWarnings.length > 0
+              ? `تم التوليد مع ملاحظات: ${result.validationWarnings.join("، ")}`
+              : "يمكنك الآن مراجعة العقد ونسخه أو تحميله.",
         });
       },
-      onError: (error) => {
+      onError: () => {
         toast({
           title: "حدث خطأ",
           description: "تعذر توليد العقد. الرجاء المحاولة مرة أخرى.",
@@ -86,7 +139,7 @@ export default function Home() {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  function onSubmit(values: FormValues) {
     mutate({ data: values });
   }
 
@@ -95,10 +148,7 @@ export default function Home() {
       navigator.clipboard.writeText(generatedContract);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-      toast({
-        title: "تم النسخ",
-        description: "تم نسخ العقد إلى الحافظة"
-      });
+      toast({ title: "تم النسخ", description: "تم نسخ العقد إلى الحافظة" });
     }
   };
 
@@ -147,264 +197,377 @@ export default function Home() {
 <body>
   <pre>${escaped}</pre>
   <script>
-    window.onload = function() {
-      setTimeout(function() { window.print(); }, 400);
-    };
+    window.onload = function() { setTimeout(function() { window.print(); }, 400); };
   </script>
 </body>
 </html>`);
     printWindow.document.close();
   };
 
+  const inputCls = "h-11 bg-background/50 focus:bg-background border-border/60 text-sm";
+  const selectTriggerCls = "h-11 bg-background/50 focus:bg-background border-border/60 text-sm";
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col items-center p-6 md:p-12 font-sans relative overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none -z-10"></div>
-      
-      <header className="w-full max-w-6xl mb-12 flex items-center justify-between z-10">
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center p-4 md:p-10 font-sans relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none -z-10" />
+
+      <header className="w-full max-w-6xl mb-10 flex items-center justify-between z-10">
         <div className="flex items-center gap-4">
-          <div className="bg-gradient-to-br from-primary/20 to-primary/5 p-4 rounded-xl border border-primary/20 shadow-[0_0_20px_rgba(212,175,55,0.15)]">
-            <Scale className="w-10 h-10 text-primary" />
+          <div className="bg-gradient-to-br from-primary/20 to-primary/5 p-3.5 rounded-xl border border-primary/20 shadow-[0_0_20px_rgba(212,175,55,0.15)]">
+            <Scale className="w-9 h-9 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white mb-1">
-              ⚖️ قانوني AI
-            </h1>
-            <p className="text-primary/80 font-medium text-sm md:text-base">
-              منصة توليد العقود القانونية - الأردن
-            </p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-white mb-0.5">قانوني AI</h1>
+            <p className="text-primary/80 font-medium text-sm">منصة توليد العقود القانونية - الأردن</p>
           </div>
         </div>
       </header>
 
       <main className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 z-10">
+        {/* ─── FORM PANEL ─── */}
         <div className="lg:col-span-5">
           <Card className="border-border/50 bg-card/60 backdrop-blur-xl shadow-2xl overflow-hidden rounded-2xl">
-            <CardHeader className="bg-secondary/30 border-b border-border/50 pb-6">
-              <CardTitle className="text-2xl font-bold text-white flex items-center gap-2">
-                بيانات العقد
-              </CardTitle>
-              <CardDescription className="text-base text-muted-foreground mt-2">
+            <CardHeader className="bg-secondary/30 border-b border-border/50 pb-5">
+              <CardTitle className="text-xl font-bold text-white">بيانات العقد</CardTitle>
+              <CardDescription className="text-sm text-muted-foreground mt-1">
                 أدخل بيانات الطرفين لتوليد عقد عمل متوافق مع قانون العمل الأردني رقم 8 لسنة 1996.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="employerName"
-                    render={({ field }) => (
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+
+                  {/* ══ SECTION 1: بيانات الطرفين ══ */}
+                  <SectionHeader number="١" title="بيانات الطرفين" />
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <FormField control={form.control} name="employerName" render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-sm font-semibold text-gray-200">اسم صاحب العمل</FormLabel>
-                        <FormControl>
-                          <Input className="h-12 bg-background/50 focus:bg-background border-border/60" placeholder="شركة الأفق للتجارة..." {...field} />
-                        </FormControl>
+                        <FormLabel className="text-xs font-semibold text-gray-300">اسم صاحب العمل <span className="text-red-400">*</span></FormLabel>
+                        <FormControl><Input className={inputCls} placeholder="شركة الأفق للتجارة..." {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="employeeName"
-                    render={({ field }) => (
+                    )} />
+
+                    <FormField control={form.control} name="employerRegistrationNumber" render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-sm font-semibold text-gray-200">اسم الموظف</FormLabel>
-                        <FormControl>
-                          <Input className="h-12 bg-background/50 focus:bg-background border-border/60" placeholder="أحمد محمد..." {...field} />
-                        </FormControl>
+                        <FormLabel className="text-xs font-semibold text-gray-300">رقم التسجيل التجاري <span className="text-muted-foreground font-normal">(اختياري)</span></FormLabel>
+                        <FormControl><Input className={inputCls} placeholder="12345678" {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="jobTitle"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-semibold text-gray-200">المسمى الوظيفي</FormLabel>
-                        <FormControl>
-                          <Input className="h-12 bg-background/50 focus:bg-background border-border/60" placeholder="مهندس برمجيات..." {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="monthlySalary"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm font-semibold text-gray-200">الراتب الشهري (د.أ)</FormLabel>
-                          <FormControl>
-                            <Input className="h-12 bg-background/50 focus:bg-background border-border/60" type="number" placeholder="500" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="startDate"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm font-semibold text-gray-200">تاريخ البدء</FormLabel>
-                          <FormControl>
-                            <Input className="h-12 bg-background/50 focus:bg-background border-border/60" type="date" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    )} />
                   </div>
-                  <FormField
-                    control={form.control}
-                    name="employmentType"
-                    render={({ field }) => (
+
+                  <Separator className="opacity-30" />
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <FormField control={form.control} name="employeeName" render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-sm font-semibold text-gray-200">نوع التعاقد</FormLabel>
+                        <FormLabel className="text-xs font-semibold text-gray-300">اسم الموظف <span className="text-red-400">*</span></FormLabel>
+                        <FormControl><Input className={inputCls} placeholder="أحمد محمد..." {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+
+                    <FormField control={form.control} name="employeeId" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-gray-300">رقم الهوية / جواز السفر <span className="text-red-400">*</span></FormLabel>
+                        <FormControl><Input className={inputCls} placeholder="123456789" {...field} /></FormControl>
+                        <p className="text-xs text-muted-foreground mt-1">رقم الهوية الوطنية أو جواز السفر — مطلوب وفق المادة (15)</p>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <FormField control={form.control} name="jobTitle" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-gray-300">المسمى الوظيفي <span className="text-red-400">*</span></FormLabel>
+                        <FormControl><Input className={inputCls} placeholder="مهندس برمجيات..." {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField control={form.control} name="department" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs font-semibold text-gray-300">القسم / الإدارة <span className="text-muted-foreground font-normal">(اختياري)</span></FormLabel>
+                          <FormControl><Input className={inputCls} placeholder="هندسة البرمجيات..." {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="directManager" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs font-semibold text-gray-300">المشرف المباشر <span className="text-muted-foreground font-normal">(اختياري)</span></FormLabel>
+                          <FormControl><Input className={inputCls} placeholder="اسم المشرف..." {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+                  </div>
+
+                  {/* ══ SECTION 2: شروط العمل ══ */}
+                  <div className="pt-2">
+                    <SectionHeader number="٢" title="شروط العمل" />
+                  </div>
+
+                  <FormField control={form.control} name="employmentType" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold text-gray-300">نوع التعاقد <span className="text-red-400">*</span></FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger className={selectTriggerCls}>
+                            <SelectValue placeholder="اختر نوع التعاقد..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="عقد دائم غير محدد المدة">عقد دائم (غير محدد المدة)</SelectItem>
+                          <SelectItem value="عقد محدد المدة">عقد محدد المدة</SelectItem>
+                          <SelectItem value="عقد جزئي">عقد جزئي (Part-time)</SelectItem>
+                          <SelectItem value="عقد مؤقت">عقد مؤقت</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField control={form.control} name="startDate" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-gray-300">تاريخ البدء <span className="text-red-400">*</span></FormLabel>
+                        <FormControl><Input className={inputCls} type="date" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+
+                    <FormField control={form.control} name="workLocation" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-gray-300">مكان / نمط العمل</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
-                            <SelectTrigger className="h-12 bg-background/50 focus:bg-background border-border/60">
-                              <SelectValue placeholder="اختر نوع التعاقد..." />
+                            <SelectTrigger className={selectTriggerCls}>
+                              <SelectValue placeholder="حضوري..." />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="عقد دائم">عقد دائم</SelectItem>
-                            <SelectItem value="عقد جزئي">عقد جزئي (Part-time)</SelectItem>
-                            <SelectItem value="عقد مؤقت">عقد مؤقت</SelectItem>
+                            <SelectItem value="حضوري في مقر الشركة">حضوري</SelectItem>
+                            <SelectItem value="عمل عن بعد بالكامل">عن بعد</SelectItem>
+                            <SelectItem value="هجين (حضوري وعن بعد)">هجين</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
-                    )}
-                  />
-
-                  <div className="pt-4 pb-2">
-                    <div className="flex items-center gap-4 mb-4">
-                      <Separator className="flex-1" />
-                      <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">إعدادات متقدمة</span>
-                      <Separator className="flex-1" />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <FormField
-                        control={form.control}
-                        name="probationPeriodDays"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-sm font-semibold text-gray-200">فترة التجربة (أيام)</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={String(field.value)}>
-                              <FormControl>
-                                <SelectTrigger className="h-12 bg-background/50 focus:bg-background border-border/60">
-                                  <SelectValue placeholder="اختر فترة التجربة..." />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="30">30</SelectItem>
-                                <SelectItem value="60">60</SelectItem>
-                                <SelectItem value="90">90</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="annualLeaveDays"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-sm font-semibold text-gray-200">أيام الإجازة السنوية</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={String(field.value)}>
-                              <FormControl>
-                                <SelectTrigger className="h-12 bg-background/50 focus:bg-background border-border/60">
-                                  <SelectValue placeholder="اختر الإجازة..." />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="14">14 (الحد الأدنى القانوني)</SelectItem>
-                                <SelectItem value="21">21</SelectItem>
-                                <SelectItem value="25">25</SelectItem>
-                                <SelectItem value="30">30</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <FormField
-                        control={form.control}
-                        name="hasBonus"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-row items-center justify-between rounded-lg border border-border/60 bg-background/50 p-4 h-[72px]">
-                            <div className="space-y-0.5">
-                              <FormLabel className="text-sm font-semibold text-gray-200">مكافأة الأداء</FormLabel>
-                              <div className="text-xs text-muted-foreground">{field.value ? "نعم، مشمولة" : "لا"}</div>
-                            </div>
-                            <FormControl>
-                              <Switch
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="hasOvertime"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-row items-center justify-between rounded-lg border border-border/60 bg-background/50 p-4 h-[72px]">
-                            <div className="space-y-0.5">
-                              <FormLabel className="text-sm font-semibold text-gray-200">العمل الإضافي</FormLabel>
-                              <div className="text-xs text-muted-foreground">{field.value ? "نعم، وفق القانون" : "لا"}</div>
-                            </div>
-                            <FormControl>
-                              <Switch
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <FormField
-                      control={form.control}
-                      name="specialConditions"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm font-semibold text-gray-200">شروط خاصة إضافية (اختياري)</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              className="resize-none bg-background/50 focus:bg-background border-border/60" 
-                              placeholder="أي شروط أو بنود إضافية..." 
-                              rows={3}
-                              {...field} 
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    )} />
                   </div>
 
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField control={form.control} name="probationPeriodDays" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-gray-300">فترة التجربة</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={String(field.value)}>
+                          <FormControl>
+                            <SelectTrigger className={selectTriggerCls}>
+                              <SelectValue placeholder="اختر..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="0">بدون فترة تجربة</SelectItem>
+                            <SelectItem value="30">30 يوم</SelectItem>
+                            <SelectItem value="60">60 يوم</SelectItem>
+                            <SelectItem value="90">90 يوم (الحد الأقصى — م.35)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+
+                    <FormField control={form.control} name="noticePeriod" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-gray-300">فترة الإشعار <span className="text-red-400">*</span></FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger className={selectTriggerCls}>
+                              <SelectValue placeholder="اختر..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="أسبوع واحد">أسبوع واحد</SelectItem>
+                            <SelectItem value="شهر واحد">شهر واحد (الحد الأدنى — م.21)</SelectItem>
+                            <SelectItem value="شهرين">شهرين</SelectItem>
+                            <SelectItem value="ثلاثة أشهر">ثلاثة أشهر</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+
+                  {/* ══ SECTION 3: الراتب والمزايا ══ */}
                   <div className="pt-2">
-                    <Button 
-                      type="submit" 
-                      className="w-full h-14 text-lg font-bold shadow-[0_4px_14px_rgba(212,175,55,0.2)] hover:shadow-[0_6px_20px_rgba(212,175,55,0.3)] transition-all" 
+                    <SectionHeader number="٣" title="الراتب والمزايا" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField control={form.control} name="monthlySalary" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-gray-300">الراتب الشهري (د.أ) <span className="text-red-400">*</span></FormLabel>
+                        <FormControl><Input className={inputCls} type="number" placeholder="500" {...field} /></FormControl>
+                        {belowMinWage && (
+                          <div className="flex items-center gap-1.5 mt-1 text-amber-400 text-xs">
+                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                            <span>أقل من الحد الأدنى ({MIN_WAGE} د.أ)</span>
+                          </div>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+
+                    <FormField control={form.control} name="annualLeaveDays" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-gray-300">الإجازة السنوية (أيام)</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={String(field.value)}>
+                          <FormControl>
+                            <SelectTrigger className={selectTriggerCls}>
+                              <SelectValue placeholder="اختر..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="14">14 يوم (الحد الأدنى — م.61)</SelectItem>
+                            <SelectItem value="21">21 يوم</SelectItem>
+                            <SelectItem value="25">25 يوم</SelectItem>
+                            <SelectItem value="30">30 يوم</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField control={form.control} name="hasBonus" render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border border-border/60 bg-background/50 px-4 py-3">
+                        <div>
+                          <FormLabel className="text-xs font-semibold text-gray-200">مكافأة الأداء</FormLabel>
+                          <div className="text-xs text-muted-foreground mt-0.5">{field.value ? "مشمولة" : "غير مشمولة"}</div>
+                        </div>
+                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="hasOvertime" render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border border-border/60 bg-background/50 px-4 py-3">
+                        <div>
+                          <FormLabel className="text-xs font-semibold text-gray-200">عمل إضافي</FormLabel>
+                          <div className="text-xs text-muted-foreground mt-0.5">{field.value ? "وفق م.57" : "غير مشمول"}</div>
+                        </div>
+                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                      </FormItem>
+                    )} />
+                  </div>
+
+                  {/* Benefits checkboxes */}
+                  <FormField control={form.control} name="benefits" render={() => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold text-gray-300 mb-2 block">المزايا والتأمينات</FormLabel>
+                      <div className="grid grid-cols-2 gap-2">
+                        {BENEFITS_OPTIONS.map((option) => (
+                          <FormField key={option.id} control={form.control} name="benefits"
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-center gap-2 rounded-md border border-border/50 bg-background/30 px-3 py-2">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(option.id)}
+                                    onCheckedChange={(checked) => {
+                                      const current = field.value ?? [];
+                                      field.onChange(
+                                        checked
+                                          ? [...current, option.id]
+                                          : current.filter((v) => v !== option.id)
+                                      );
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-xs text-gray-300 font-normal cursor-pointer leading-tight">
+                                  {option.label}
+                                </FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                    </FormItem>
+                  )} />
+
+                  {/* ══ SECTION 4: الحقوق والالتزامات ══ */}
+                  <div className="pt-2">
+                    <SectionHeader number="٤" title="الحقوق والالتزامات" />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    <FormField control={form.control} name="hasConfidentialityClause" render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border border-border/60 bg-background/50 px-4 py-3">
+                        <div>
+                          <FormLabel className="text-xs font-semibold text-gray-200">بند السرية</FormLabel>
+                          <div className="text-xs text-muted-foreground mt-0.5">حفظ أسرار صاحب العمل التجارية</div>
+                        </div>
+                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                      </FormItem>
+                    )} />
+
+                    <FormField control={form.control} name="ipRights" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-gray-300">حقوق الملكية الفكرية</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger className={selectTriggerCls}>
+                              <SelectValue placeholder="اختر..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="تؤول جميع حقوق الملكية الفكرية لصاحب العمل">لصاحب العمل</SelectItem>
+                            <SelectItem value="تؤول جميع حقوق الملكية الفكرية للموظف">للموظف</SelectItem>
+                            <SelectItem value="ملكية مشتركة بين الطرفين">ملكية مشتركة</SelectItem>
+                            <SelectItem value="وفق ما ينظمه القانون الأردني">وفق القانون الأردني</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+
+                  {/* Advanced / Special Conditions toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedOpen((v) => !v)}
+                    className="flex items-center gap-2 text-xs text-muted-foreground hover:text-gray-300 transition-colors w-full"
+                  >
+                    {advancedOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    شروط خاصة إضافية
+                  </button>
+
+                  {advancedOpen && (
+                    <FormField control={form.control} name="specialConditions" render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Textarea
+                            className="resize-none bg-background/50 focus:bg-background border-border/60 text-sm"
+                            placeholder="أي بنود أو شروط إضافية..."
+                            rows={3}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  )}
+
+                  <div className="pt-2">
+                    <Button
+                      type="submit"
+                      className="w-full h-13 text-base font-bold shadow-[0_4px_14px_rgba(212,175,55,0.2)] hover:shadow-[0_6px_20px_rgba(212,175,55,0.3)] transition-all py-3.5"
                       disabled={isPending}
                     >
                       {isPending ? (
-                        <>
-                          <Spinner className="ml-3 w-5 h-5 text-primary-foreground" /> جاري توليد العقد...
-                        </>
+                        <><Spinner className="ml-3 w-5 h-5 text-primary-foreground" /> جاري توليد العقد...</>
                       ) : (
                         "توليد العقد"
                       )}
@@ -416,51 +579,65 @@ export default function Home() {
           </Card>
         </div>
 
+        {/* ─── CONTRACT PREVIEW ─── */}
         <div className="lg:col-span-7">
           <Card className="h-full border-border/50 bg-card/40 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden min-h-[600px] rounded-2xl relative">
-            <CardHeader className="border-b border-border/50 bg-secondary/30 flex flex-row items-center justify-between py-5">
+            <CardHeader className="border-b border-border/50 bg-secondary/30 flex flex-row items-center justify-between py-4 shrink-0">
               <div>
-                <CardTitle className="flex items-center gap-3 text-xl font-bold text-white">
-                  <FileText className="w-6 h-6 text-primary" /> معاينة العقد
+                <CardTitle className="flex items-center gap-2.5 text-lg font-bold text-white">
+                  <FileText className="w-5 h-5 text-primary" /> معاينة العقد
                 </CardTitle>
               </div>
               {generatedContract && (
-                <div className="flex items-center gap-3">
-                  <Button variant="outline" size="sm" onClick={handleCopy} className="h-10 px-4 border-border/60 hover:bg-white/5 transition-colors">
-                    {copied ? <Check className="w-4 h-4 ml-2 text-green-500" /> : <Copy className="w-4 h-4 ml-2 text-gray-300" />}
-                    {copied ? "تم النسخ" : "نسخ النص"}
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={handleCopy} className="h-9 px-3 border-border/60 hover:bg-white/5 text-xs">
+                    {copied ? <Check className="w-3.5 h-3.5 ml-1.5 text-green-500" /> : <Copy className="w-3.5 h-3.5 ml-1.5 text-gray-300" />}
+                    {copied ? "تم النسخ" : "نسخ"}
                   </Button>
-                  <Button variant="default" size="sm" onClick={handleDownloadPdf} className="h-10 px-4 shadow-md">
-                    <FileDown className="w-4 h-4 ml-2" />
+                  <Button variant="default" size="sm" onClick={handleDownloadPdf} className="h-9 px-3 shadow-md text-xs">
+                    <FileDown className="w-3.5 h-3.5 ml-1.5" />
                     تحميل PDF
                   </Button>
                 </div>
               )}
             </CardHeader>
-            <CardContent className="flex-1 p-0 relative bg-background/20">
+
+            {/* Warnings strip */}
+            {validationWarnings.length > 0 && (
+              <div className="bg-amber-500/10 border-b border-amber-500/30 px-5 py-2.5">
+                {validationWarnings.map((w, i) => (
+                  <div key={i} className="flex items-start gap-2 text-xs text-amber-300">
+                    <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>{w}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <CardContent className="flex-1 p-0 relative bg-background/20 overflow-hidden">
               {isPending ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-card/80 backdrop-blur-md z-10 animate-in fade-in duration-500">
-                  <div className="relative">
-                    <div className="w-24 h-24 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-8"></div>
-                    <Scale className="w-8 h-8 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -mt-4 opacity-50" />
+                  <div className="relative mb-6">
+                    <div className="w-20 h-20 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                    <Scale className="w-7 h-7 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-50" />
                   </div>
-                  <h3 className="text-2xl font-bold text-white mb-2">صياغة بنود العقد...</h3>
-                  <p className="text-primary/80 font-medium">يتم الآن تطبيق المواد القانونية وفق قانون العمل الأردني</p>
+                  <h3 className="text-xl font-bold text-white mb-1.5">صياغة بنود العقد...</h3>
+                  <p className="text-primary/80 font-medium text-sm">يتم تطبيق المواد القانونية وفق قانون العمل الأردني</p>
                 </div>
               ) : null}
 
               {generatedContract ? (
-                <div className="p-8 md:p-12 h-full overflow-y-auto whitespace-pre-wrap leading-loose text-base md:text-lg font-serif text-gray-200">
+                <div className="p-8 md:p-10 h-full overflow-y-auto whitespace-pre-wrap leading-loose text-sm md:text-base font-serif text-gray-200">
                   {generatedContract}
                 </div>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-8 text-center opacity-70">
-                  <div className="bg-secondary/40 p-6 rounded-full mb-6 border border-border/50 shadow-inner">
-                    <FileText className="w-16 h-16 text-muted-foreground/60" />
+                  <div className="bg-secondary/40 p-5 rounded-full mb-5 border border-border/50 shadow-inner">
+                    <FileText className="w-14 h-14 text-muted-foreground/60" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-300 mb-2">وثيقة العقد ستظهر هنا</h3>
-                  <p className="text-base mt-2 max-w-sm leading-relaxed">
-                    الرجاء إدخال البيانات في النموذج والضغط على "توليد العقد". سيتم إنشاء العقد بشكل احترافي وجاهز للاعتماد.
+                  <h3 className="text-lg font-bold text-gray-300 mb-2">وثيقة العقد ستظهر هنا</h3>
+                  <p className="text-sm mt-1.5 max-w-sm leading-relaxed">
+                    أدخل بيانات الطرفين في النموذج واضغط "توليد العقد" — سيُصاغ العقد استناداً حصراً إلى نصوص قانون العمل الأردني.
                   </p>
                 </div>
               )}
