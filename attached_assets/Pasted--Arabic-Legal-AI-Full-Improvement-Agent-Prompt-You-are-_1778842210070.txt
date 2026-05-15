@@ -1,0 +1,522 @@
+# Arabic Legal AI — Full Improvement Agent Prompt
+
+You are working on a React + Express (TypeScript) Arabic Legal AI app called **قانوني AI**.
+The project lives at `Implement-It/` with two artifacts:
+- Frontend: `artifacts/legal-ai/` (React + Vite + Tailwind + shadcn/ui)
+- Backend: `artifacts/api-server/` (Express + TypeScript + Anthropic SDK)
+
+The existing code generates Arabic employment contracts using Jordan Labor Law. It works.
+Your job is to improve it across several areas described below. Do them in order.
+Do NOT touch anything not mentioned. Do NOT install a database.
+
+---
+
+## TASK 1 — Fix the PDF export
+
+**File:** `artifacts/legal-ai/src/pages/Home.tsx`
+
+**Problem:** The current `handleDownloadPdf` function uses `window.open` + `window.print()`.
+This is broken on mobile, produces inconsistent output, has no logo, and depends on the user's
+printer settings. Replace it with a real client-side PDF library.
+
+**Steps:**
+
+1. Install `pdfmake` in the frontend:
+   ```
+   cd artifacts/legal-ai && npm install pdfmake @types/pdfmake
+   ```
+
+2. Replace the entire `handleDownloadPdf` function with this logic:
+   - Import pdfmake: `import pdfMake from 'pdfmake/build/pdfmake'` and `import pdfFonts from 'pdfmake/build/vfs_fonts'`
+   - Set `pdfMake.vfs = pdfFonts.pdfMake.vfs`
+   - Build a `TDocumentDefinitions` object with:
+     - `pageSize: 'A4'`
+     - `pageMargins: [40, 60, 40, 60]`
+     - `defaultStyle: { font: 'Roboto', fontSize: 11, lineHeight: 1.8, alignment: 'right', direction: 'rtl' }`
+     - A header section: firm name placeholder on the right, page number on the left
+     - The contract text as a `{ text: generatedContract, ... }` content block
+     - A footer: `{ text: 'تنبيه: هذا العقد مُولَّد بمساعدة الذكاء الاصطناعي. يُنصح بمراجعة محامٍ أردني مرخص قبل التوقيع.', fontSize: 8, color: '#888', alignment: 'center' }`
+   - Call `pdfMake.createPdf(docDefinition).download('عقد-عمل-' + employeeName + '.pdf')`
+
+3. Update the download button label from `تحميل PDF` to `تحميل PDF ↓`
+
+---
+
+## TASK 2 — Add a WhatsApp share button
+
+**File:** `artifacts/legal-ai/src/pages/Home.tsx`
+
+**Problem:** The plan says "send via WhatsApp" is a core workflow step. There is no WhatsApp button.
+
+**Steps:**
+
+1. Add a new handler function directly after `handleDownloadPdf`:
+   ```typescript
+   const handleWhatsApp = () => {
+     if (!generatedContract) return;
+     const encoded = encodeURIComponent(generatedContract);
+     window.open(`https://wa.me/?text=${encoded}`, '_blank');
+   };
+   ```
+
+2. Add a WhatsApp button in the CardHeader action bar, right after the Download PDF button:
+   ```tsx
+   <Button
+     variant="outline"
+     size="sm"
+     onClick={handleWhatsApp}
+     className="h-9 px-3 border-green-500/40 hover:bg-green-500/10 text-green-400 text-xs"
+   >
+     {/* WhatsApp icon — use a simple SVG inline or lucide MessageCircle */}
+     <MessageCircle className="w-3.5 h-3.5 ml-1.5" />
+     واتساب
+   </Button>
+   ```
+
+3. Import `MessageCircle` from `lucide-react` at the top of the file (add it to the existing lucide import line).
+
+---
+
+## TASK 3 — Add 4 new contract types
+
+**Overview:** The plan specified 5 contract types. Only employment exists.
+You must add: Rental Agreement (إيجار), Service/Freelance Contract (خدمات),
+NDA (سرية), and Supplier Agreement (موردين).
+
+### 3A — Add contract type selector to the frontend
+
+**File:** `artifacts/legal-ai/src/pages/Home.tsx`
+
+1. Add a new state variable at the top of the `Home` component:
+   ```typescript
+   const [contractType, setContractType] = useState<'employment' | 'rental' | 'service' | 'nda' | 'supplier'>('employment');
+   ```
+
+2. Before `SectionHeader number="١"`, add a contract type selector card:
+   ```tsx
+   <div className="mb-6">
+     <div className="text-xs font-semibold text-gray-300 mb-2">نوع العقد</div>
+     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+       {[
+         { value: 'employment', label: 'عقد عمل', icon: '👔' },
+         { value: 'rental',     label: 'عقد إيجار', icon: '🏠' },
+         { value: 'service',    label: 'عقد خدمات', icon: '🤝' },
+         { value: 'nda',        label: 'اتفاقية سرية', icon: '🔒' },
+         { value: 'supplier',   label: 'عقد مورد', icon: '📦' },
+       ].map((t) => (
+         <button
+           key={t.value}
+           type="button"
+           onClick={() => setContractType(t.value as typeof contractType)}
+           className={`rounded-lg border px-3 py-2.5 text-xs font-medium transition-all text-right ${
+             contractType === t.value
+               ? 'border-primary bg-primary/10 text-primary'
+               : 'border-border/60 bg-background/30 text-muted-foreground hover:border-primary/40'
+           }`}
+         >
+           <span className="ml-1">{t.icon}</span>
+           {t.label}
+         </button>
+       ))}
+     </div>
+   </div>
+   ```
+
+3. Conditionally render the form sections based on `contractType`:
+   - When `contractType === 'employment'` → show the existing full form (everything from SectionHeader "١" onward)
+   - When `contractType === 'rental'` → show `<RentalForm form={form} />` (you will create this)
+   - When `contractType === 'service'` → show `<ServiceForm form={form} />`
+   - When `contractType === 'nda'` → show `<NdaForm form={form} />`
+   - When `contractType === 'supplier'` → show `<SupplierForm form={form} />`
+
+4. Pass `contractType` as a field in `onSubmit` to the API:
+   ```typescript
+   function onSubmit(values: FormValues) {
+     mutate({ data: { ...values, contractType } });
+   }
+   ```
+
+### 3B — Create the 4 new form components
+
+Create a new file: `artifacts/legal-ai/src/components/ContractForms.tsx`
+
+This file exports 4 form components. Each accepts `{ form }` as a prop and renders the relevant fields using the same shadcn/ui `FormField` pattern already used in `Home.tsx`.
+
+**RentalForm fields:**
+- `landlordName` — string required — اسم المؤجر
+- `tenantName` — string required — اسم المستأجر
+- `propertyAddress` — string required — عنوان العقار
+- `propertyType` — select: شقة / فيلا / محل تجاري / مستودع — نوع العقار
+- `monthlyRent` — number required — الإيجار الشهري (دينار أردني)
+- `contractDurationMonths` — number default 12 — مدة العقد (أشهر)
+- `startDate` — string required — تاريخ بدء الإيجار
+- `depositAmount` — number default 0 — مبلغ التأمين (دينار أردني)
+- `paymentDayOfMonth` — number default 1 — يوم استحقاق الإيجار شهرياً
+- `furnitureStatus` — select: مفروش / نصف مفروش / غير مفروش — حالة التأثيث
+- `specialConditions` — textarea optional — شروط خاصة
+
+**ServiceForm fields:**
+- `clientName` — string required — اسم العميل
+- `providerName` — string required — اسم مقدم الخدمة
+- `serviceDescription` — textarea required — وصف الخدمة المطلوبة
+- `totalFee` — number required — الأتعاب الإجمالية (دينار أردني)
+- `paymentTerms` — select: دفعة واحدة / دفعتان / دفعات شهرية — شروط الدفع
+- `deliveryDeadline` — string required — الموعد النهائي للتسليم
+- `hasRevisions` — boolean switch default true — هل تشمل مراجعات؟
+- `revisionCount` — number default 2 (shown only if hasRevisions) — عدد المراجعات المسموحة
+- `ipOwnership` — select: للعميل / لمقدم الخدمة / مشترك — ملكية المخرجات
+- `hasConfidentialityClause` — boolean switch default true — بند السرية
+- `specialConditions` — textarea optional — شروط خاصة
+
+**NdaForm fields:**
+- `partyOneName` — string required — الطرف الأول (المُفصِح)
+- `partyTwoName` — string required — الطرف الثاني (المُستقبِل)
+- `purposeOfDisclosure` — textarea required — الغرض من الإفصاح (مثلاً: دراسة شراكة تجارية)
+- `confidentialityDurationYears` — number default 2 — مدة السرية (سنوات)
+- `scopeOfConfidential` — textarea required — نطاق المعلومات السرية (ما الذي يشمله)
+- `permittedDisclosures` — textarea optional — الإفصاحات المسموحة (مثلاً: الموظفون المباشرون)
+- `penaltyAmount` — number optional — غرامة الإخلاء (دينار أردني)
+- `governingLaw` — static text: "القانون الأردني — المحاكم الأردنية" — القانون المطبق
+- `startDate` — string required — تاريخ سريان الاتفاقية
+
+**SupplierForm fields:**
+- `buyerName` — string required — اسم المشتري / الجهة
+- `supplierName` — string required — اسم المورد
+- `goodsOrServices` — textarea required — وصف البضاعة / الخدمات
+- `totalContractValue` — number required — القيمة الإجمالية للعقد (دينار أردني)
+- `paymentTerms` — select: فور الاستلام / 30 يوم / 60 يوم / 90 يوم — شروط الدفع
+- `deliverySchedule` — string required — جدول التوريد / مواعيد التسليم
+- `deliveryLocation` — string required — مكان التسليم
+- `warrantyPeriodDays` — number default 30 — فترة الضمان (أيام)
+- `penaltyForDelay` — number optional (percentage) — غرامة التأخير (% يومياً)
+- `hasExclusivity` — boolean switch default false — هل العقد حصري؟
+- `specialConditions` — textarea optional — شروط خاصة
+
+### 3C — Add Zod schemas for the new contract types
+
+**File:** `artifacts/legal-ai/src/pages/Home.tsx` (or extract to a shared schemas file)
+
+Extend the existing `formSchema` using `z.discriminatedUnion` OR simply add all optional fields and validate on the server. The simpler approach: add all new fields as optional to the existing `formSchema` with `.optional()`.
+
+### 3D — Create backend routes for the 4 new contract types
+
+**File:** `artifacts/api-server/src/routes/contracts/index.ts`
+
+Add 4 new POST routes following the exact same pattern as `/contracts/generate`:
+
+```
+POST /contracts/generate-rental
+POST /contracts/generate-service
+POST /contracts/generate-nda
+POST /contracts/generate-supplier
+```
+
+For each route, create a `buildRentalPrompt()`, `buildServicePrompt()`, `buildNdaPrompt()`, `buildSupplierPrompt()` function.
+
+**Rental prompt instruction (full):**
+```
+أنت كاتب عدل أردني متخصص في عقود الإيجار.
+صِغ عقد إيجار رسمياً استناداً إلى القانون المدني الأردني رقم (43) لسنة 1976 وتعديلاته،
+وقانون إيجار العقارات الأردني رقم (11) لسنة 1994 وتعديلاته.
+
+القواعد الصارمة:
+1. لا تستخدم emoji في أي جزء من العقد.
+2. كل حكم قانوني يجب الإشارة إلى مادته.
+3. لا تخترع مواد غير موجودة في القانونين أعلاه.
+4. إذا كان موضوع ما غير مشمول، اكتب: [يُرجى مراجعة محامٍ أردني مرخص].
+5. ابدأ مباشرةً بـ"عقد إيجار" دون مقدمة.
+6. ضمّن بنداً واضحاً لآلية الإخلاء وفترة الإشعار (شهر كحد أدنى وفق القانون).
+7. ضمّن بنداً لحالات فسخ العقد من قِبل كل طرف.
+8. ضمّن بنداً للصيانة: الصيانة الكبيرة على المؤجر، الصغيرة على المستأجر.
+
+بيانات العقد:
+المؤجر: {landlordName}
+المستأجر: {tenantName}
+العقار: {propertyAddress} — النوع: {propertyType} — الحالة: {furnitureStatus}
+الإيجار الشهري: {monthlyRent} دينار أردني — يُدفع في اليوم {paymentDayOfMonth} من كل شهر
+مبلغ التأمين: {depositAmount} دينار أردني (يُسترد عند إخلاء العقار بحالة جيدة)
+مدة العقد: {contractDurationMonths} شهراً — ابتداءً من {startDate}
+شروط خاصة: {specialConditions}
+
+اكتب العقد الآن في الأجزاء: بيانات الطرفين / العقار / شروط الإيجار والدفع / التزامات الطرفين / فسخ العقد وإنهاؤه / أحكام ختامية / التوقيعات.
+```
+
+**Service contract prompt instruction (full):**
+```
+أنت محامٍ أردني متخصص في عقود الخدمات والاستشارات.
+صِغ عقد خدمات مهنية ملزماً وفق القانون المدني الأردني رقم (43) لسنة 1976.
+
+القواعد الصارمة:
+1. لا emoji.
+2. أشر إلى المادة القانونية في كل حكم.
+3. لا تخترع نصوصاً قانونية.
+4. ابدأ مباشرةً بـ"عقد خدمات".
+5. ضمّن بنداً صريحاً لاستقلالية مقدم الخدمة (ليس موظفاً).
+6. ضمّن بنداً لإجراءات القبول والرفض عند التسليم.
+7. ضمّن بنداً للإنهاء المبكر وتبعاته المالية.
+
+بيانات العقد:
+العميل: {clientName}
+مقدم الخدمة: {providerName}
+وصف الخدمة: {serviceDescription}
+الأتعاب الإجمالية: {totalFee} دينار أردني
+شروط الدفع: {paymentTerms}
+الموعد النهائي للتسليم: {deliveryDeadline}
+المراجعات: {revisionInfo}
+ملكية المخرجات: {ipOwnership}
+بند السرية: {confidentialityText}
+شروط خاصة: {specialConditions}
+
+اكتب العقد في الأجزاء: تعريف الطرفين / نطاق الخدمة / الجدول الزمني / الأتعاب والدفع / التسليم والقبول / الملكية الفكرية / السرية / إنهاء العقد / أحكام عامة / التوقيعات.
+```
+
+**NDA prompt instruction (full):**
+```
+أنت محامٍ أردني متخصص في اتفاقيات عدم الإفصاح.
+صِغ اتفاقية سرية (NDA) ملزمة قانونياً وفق القانون المدني الأردني وقانون المنافسة وحماية أسرار التجارة.
+
+القواعد الصارمة:
+1. لا emoji.
+2. اجعل الاتفاقية أحادية الاتجاه (من الطرف الأول للثاني) ما لم يُطلب ثنائية.
+3. ضمّن قائمة صريحة باستثناءات السرية (المعلومات العامة، ما أُفصح بموافقة مسبقة، ما طلبته جهة قانونية).
+4. ضمّن بنداً للعقوبات والتعويض.
+5. ضمّن بنداً لاسترداد وإتلاف المعلومات عند انتهاء الاتفاقية.
+6. ابدأ بـ"اتفاقية عدم إفصاح وسرية".
+
+بيانات الاتفاقية:
+الطرف الأول (المُفصِح): {partyOneName}
+الطرف الثاني (المُستقبِل): {partyTwoName}
+الغرض من الإفصاح: {purposeOfDisclosure}
+نطاق المعلومات السرية: {scopeOfConfidential}
+الإفصاحات المسموحة: {permittedDisclosures}
+مدة السرية: {confidentialityDurationYears} سنوات
+الغرامة عند الإخلال: {penaltyAmount} دينار أردني
+تاريخ السريان: {startDate}
+القانون الحاكم: {governingLaw}
+
+اكتب الاتفاقية في الأجزاء: تعريف الطرفين والغرض / تعريف المعلومات السرية / الالتزامات والقيود / الاستثناءات / مدة الاتفاقية / العقوبات والتعويض / إعادة المعلومات وإتلافها / أحكام عامة / التوقيعات.
+```
+
+**Supplier contract prompt instruction (full):**
+```
+أنت محامٍ أردني متخصص في عقود التوريد والمشتريات.
+صِغ عقد توريد تجارياً وفق القانون المدني الأردني رقم (43) لسنة 1976 وقانون التجارة الأردني.
+
+القواعد الصارمة:
+1. لا emoji.
+2. أشر إلى المادة القانونية في كل حكم.
+3. ضمّن بنداً صريحاً لآلية الفحص والاستلام وحق الرفض.
+4. ضمّن بنداً لانتقال المخاطر والملكية (عند التسليم في المكان المتفق).
+5. ضمّن بنداً للقوة القاهرة وتعريفها.
+6. ابدأ بـ"عقد توريد".
+
+بيانات العقد:
+المشتري: {buyerName}
+المورد: {supplierName}
+البضاعة / الخدمات: {goodsOrServices}
+القيمة الإجمالية: {totalContractValue} دينار أردني
+شروط الدفع: {paymentTerms}
+جدول التوريد: {deliverySchedule}
+مكان التسليم: {deliveryLocation}
+فترة الضمان: {warrantyPeriodDays} يوماً
+غرامة التأخير: {penaltyForDelay}
+الحصرية: {exclusivityText}
+شروط خاصة: {specialConditions}
+
+اكتب العقد في الأجزاء: تعريف الطرفين / موضوع العقد / جدول التوريد / الأسعار والدفع / الفحص والاستلام / الضمان / غرامات التأخير / انتقال المخاطر / القوة القاهرة / إنهاء العقد / فض النزاعات / أحكام ختامية / التوقيعات.
+```
+
+Each route should follow the same validation → AI call → response pattern as the existing employment route.
+
+---
+
+## TASK 4 — Fix HTML root for Arabic RTL
+
+**File:** `artifacts/legal-ai/index.html`
+
+1. Find the `<html>` tag and change it to:
+   ```html
+   <html lang="ar" dir="rtl">
+   ```
+
+2. In `<head>`, ensure this meta tag exists:
+   ```html
+   <meta charset="UTF-8" />
+   ```
+
+3. Add the Cairo Google Font (already used in the PDF print CSS but not in the app):
+   ```html
+   <link rel="preconnect" href="https://fonts.googleapis.com" />
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+   ```
+
+4. In `artifacts/legal-ai/src/index.css`, add to the `:root` or `body`:
+   ```css
+   body {
+     font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+     direction: rtl;
+   }
+   ```
+
+---
+
+## TASK 5 — Fix bad default values in the form
+
+**File:** `artifacts/legal-ai/src/pages/Home.tsx`
+
+In the `useForm` `defaultValues` object, make these changes:
+
+1. Change `probationPeriodDays: 90` → `probationPeriodDays: 30`
+   - Reason: 90 is the legal MAXIMUM, not a sensible default. 30 days is standard practice.
+
+2. Change `annualLeaveDays: 14` → keep as 14 but add a visible note in the form field:
+   ```tsx
+   <div className="text-xs text-amber-400/80 mt-1">
+     ⚠ الحد الأدنى القانوني 14 يوم. بعد 5 سنوات خدمة يرتفع إلى 21 يوم (المادة 61)
+   </div>
+   ```
+   Place this `div` directly after the `annualLeaveDays` FormItem.
+
+3. Change `hasBonus: false` → `hasBonus: false` (keep, correct)
+
+4. Add a real-time salary warning BELOW the salary input field (the code watches `belowMinWage`
+   but there is no JSX element rendering it). Find the salary `FormItem` block and add after `<FormMessage />`:
+   ```tsx
+   {belowMinWage && (
+     <div className="flex items-center gap-1.5 text-xs text-red-400 mt-1">
+       <AlertTriangle className="w-3 h-3 shrink-0" />
+       الراتب أقل من الحد الأدنى القانوني (290 د.أ) — سيُدرج تحذير في العقد
+     </div>
+   )}
+   ```
+
+---
+
+## TASK 6 — Add a legal disclaimer banner on the output
+
+**File:** `artifacts/legal-ai/src/pages/Home.tsx`
+
+Currently the disclaimer only appears inside the contract text. Add a visible UI banner.
+
+After the `{validationWarnings.length > 0 && ...}` block, add a static banner that always shows when a contract is generated:
+
+```tsx
+{generatedContract && (
+  <div className="bg-blue-500/8 border-b border-blue-500/20 px-5 py-2 flex items-start gap-2">
+    <Scale className="w-3.5 h-3.5 mt-0.5 shrink-0 text-blue-400" />
+    <p className="text-xs text-blue-300/80 leading-relaxed">
+      هذا العقد مُولَّد بالذكاء الاصطناعي استناداً لقانون العمل الأردني رقم (8) لسنة 1996.
+      يُنصح بمراجعة محامٍ مرخص قبل التوقيع. المنصة لا تُمارس المهنة القانونية.
+    </p>
+  </div>
+)}
+```
+
+---
+
+## TASK 7 — Add contract type label to the generated output header
+
+**File:** `artifacts/legal-ai/src/pages/Home.tsx`
+
+In the `CardHeader` of the contract preview panel, the title is always `معاينة العقد`.
+Change it to be dynamic based on contract type:
+
+```tsx
+const contractTypeLabel = {
+  employment: 'عقد عمل',
+  rental: 'عقد إيجار',
+  service: 'عقد خدمات',
+  nda: 'اتفاقية سرية',
+  supplier: 'عقد مورد',
+}[contractType] ?? 'معاينة العقد';
+```
+
+Then use `{contractTypeLabel}` in the title:
+```tsx
+<CardTitle ...>
+  <FileText className="w-5 h-5 text-primary" /> {contractTypeLabel}
+</CardTitle>
+```
+
+---
+
+## TASK 8 — Improve the API error messages
+
+**File:** `artifacts/api-server/src/routes/contracts/index.ts`
+
+Currently when validation fails (missing clauses), the API returns a 422 with an Arabic message,
+but the frontend toast only shows "تعذر توليد العقد. الرجاء المحاولة مرة أخرى." for ALL errors.
+
+Fix the frontend error handler to distinguish between 422 (validation) and 500 (server error):
+
+In `Home.tsx`, in the `onError` callback of `useGenerateContract`, check the error response:
+```typescript
+onError: (error: any) => {
+  const is422 = error?.response?.status === 422;
+  const missing = error?.response?.data?.missingClauses;
+  toast({
+    title: is422 ? 'العقد غير مكتمل قانونياً' : 'حدث خطأ',
+    description: is422 && missing
+      ? `البنود المفقودة: ${missing.join('، ')}`
+      : 'تعذر توليد العقد. الرجاء المحاولة مرة أخرى.',
+    variant: 'destructive',
+  });
+},
+```
+
+---
+
+## TASK 9 — Add loading state per contract type
+
+**File:** `artifacts/legal-ai/src/pages/Home.tsx`
+
+The loading overlay text is hardcoded to "صياغة بنود العقد..." regardless of contract type.
+Make it dynamic:
+
+```typescript
+const loadingMessages = {
+  employment: 'صياغة بنود عقد العمل...',
+  rental:     'صياغة بنود عقد الإيجار...',
+  service:    'صياغة بنود عقد الخدمات...',
+  nda:        'صياغة اتفاقية عدم الإفصاح...',
+  supplier:   'صياغة بنود عقد التوريد...',
+};
+```
+
+Replace the hardcoded string in the loading overlay with `{loadingMessages[contractType]}`.
+
+---
+
+## TASK 10 — Update the page meta title and favicon
+
+**File:** `artifacts/legal-ai/index.html`
+
+1. Change `<title>` to: `قانوني AI — عقود ذكية وفق القانون الأردني`
+
+2. Add Open Graph meta tags for sharing:
+   ```html
+   <meta property="og:title" content="قانوني AI — عقود ذكية وفق القانون الأردني" />
+   <meta property="og:description" content="منصة توليد العقود القانونية الأردنية بالذكاء الاصطناعي في 30 ثانية" />
+   <meta property="og:locale" content="ar_JO" />
+   ```
+
+---
+
+## Summary of all changes
+
+| # | Task | Files changed |
+|---|------|--------------|
+| 1 | Real PDF export with pdfmake | `legal-ai/src/pages/Home.tsx` |
+| 2 | WhatsApp share button | `legal-ai/src/pages/Home.tsx` |
+| 3 | 4 new contract types (rental/service/NDA/supplier) | `legal-ai/src/pages/Home.tsx`, new `ContractForms.tsx`, `api-server/src/routes/contracts/index.ts` |
+| 4 | Fix HTML root for Arabic RTL | `legal-ai/index.html`, `legal-ai/src/index.css` |
+| 5 | Fix form default values + salary warning UI | `legal-ai/src/pages/Home.tsx` |
+| 6 | Legal disclaimer banner on output | `legal-ai/src/pages/Home.tsx` |
+| 7 | Dynamic contract type label in output header | `legal-ai/src/pages/Home.tsx` |
+| 8 | Better API error messages | `legal-ai/src/pages/Home.tsx` |
+| 9 | Dynamic loading message per contract type | `legal-ai/src/pages/Home.tsx` |
+| 10 | Page meta title + Open Graph tags | `legal-ai/index.html` |
+
+**Do not install a database. Do not add authentication. Do not add payments.
+Do not modify any file not listed above. Do not rename or move existing files.**
