@@ -171,58 +171,53 @@ export default function Home() {
     toast({ title: "تم النسخ", description: "تم نسخ العقد إلى الحافظة" });
   };
 
-  const handleDownloadPdf = () => {
+  const handleDownloadWord = async () => {
     if (!generatedContract) return;
-    const employeeName = form.getValues().employeeName || "عقد";
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+    const values = form.getValues();
+    const partyName =
+      contractType === "employment"
+        ? values.employeeName || "موظف"
+        : values.employerName || "وثيقة";
 
-    const label = CONTRACT_TYPE_LABEL[contractType];
-    const today = new Date().toLocaleDateString("ar-JO", { year: "numeric", month: "long", day: "numeric" });
-    const escaped = generatedContract
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    try {
+      const res = await fetch("/api/contracts/export-word", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contractText: generatedContract,
+          contractTypeLabel: CONTRACT_TYPE_LABEL[contractType],
+          partyName,
+        }),
+      });
 
-    printWindow.document.write(`<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <title>${label} — ${employeeName}</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Cairo', Arial, sans-serif; direction: rtl; text-align: right; color: #111; background: #fff; }
-    .page { padding: 50px 55px 70px; }
-    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #c9a94e; padding-bottom: 14px; margin-bottom: 28px; }
-    .header-brand { font-size: 18px; font-weight: 700; color: #c9a94e; }
-    .header-meta { font-size: 11px; color: #666; text-align: left; }
-    pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 13px; line-height: 2; }
-    .footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 10px; color: #888; text-align: center; }
-    @media print { body { } @page { margin: 15mm 18mm; size: A4; } }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <div class="header">
-      <div class="header-brand">قانوني AI — ${label}</div>
-      <div class="header-meta">تاريخ الإصدار: ${today}</div>
-    </div>
-    <pre>${escaped}</pre>
-    <div class="footer">هذا العقد مُولَّد بمساعدة الذكاء الاصطناعي استناداً للقانون الأردني. يُنصح بمراجعة محامٍ مرخص قبل التوقيع. — قانوني AI</div>
-  </div>
-  <script>window.onload = function() { setTimeout(function() { window.print(); }, 400); };</script>
-</body>
-</html>`);
-    printWindow.document.close();
+      if (!res.ok) {
+        toast({ title: "خطأ في التصدير", description: "تعذر تصدير الوثيقة", variant: "destructive" });
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${CONTRACT_TYPE_LABEL[contractType]}-${partyName}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({ title: "تم التصدير", description: "تم تحميل الوثيقة بصيغة Word (.docx)" });
+    } catch {
+      toast({ title: "خطأ", description: "تعذر الاتصال بالخادم", variant: "destructive" });
+    }
   };
 
   const handleWhatsApp = () => {
     if (!generatedContract) return;
     navigator.clipboard.writeText(generatedContract).then(() => {
-      const msg = encodeURIComponent("مرحباً، أرسل لك عقداً قانونياً مُولَّداً بالذكاء الاصطناعي. النص منسوخ في الحافظة — الصقه هنا:");
-      window.open(`https://wa.me/?text=${msg}`, "_blank");
+      window.open("https://wa.me/", "_blank");
       toast({
-        title: "تم النسخ وفتح واتساب",
-        description: "الصق نص العقد في محادثة واتساب",
+        title: "تم النسخ — افتح المحادثة والصق",
+        description: "تم نسخ نص العقد. افتح المحادثة في واتساب والصق النص (Ctrl+V أو اضغط مطولاً)",
       });
     }).catch(() => {
       toast({
@@ -250,6 +245,13 @@ export default function Home() {
             <p className="text-primary/80 font-medium text-sm">منصة توليد العقود القانونية - الأردن</p>
           </div>
         </div>
+        <a
+          href="/review"
+          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors border border-border/50 hover:border-primary/40 rounded-lg px-4 py-2"
+        >
+          <FileText className="w-4 h-4" />
+          مراجع العقود
+        </a>
       </header>
 
       <main className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 z-10">
@@ -605,9 +607,9 @@ export default function Home() {
                     {copied ? <Check className="w-3.5 h-3.5 ml-1.5 text-green-500" /> : <Copy className="w-3.5 h-3.5 ml-1.5 text-gray-300" />}
                     {copied ? "تم" : "نسخ"}
                   </Button>
-                  <Button variant="default" size="sm" onClick={handleDownloadPdf} className="h-9 px-3 shadow-md text-xs">
+                  <Button variant="default" size="sm" onClick={handleDownloadWord} className="h-9 px-3 shadow-md text-xs">
                     <FileDown className="w-3.5 h-3.5 ml-1.5" />
-                    تحميل PDF
+                    تحميل Word
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleWhatsApp}
                     className="h-9 px-3 border-green-500/40 hover:bg-green-500/10 text-green-400 text-xs">
