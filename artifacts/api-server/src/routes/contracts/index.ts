@@ -1,4 +1,5 @@
 import { Router } from "express";
+import * as z from "zod";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { GenerateContractBody } from "@workspace/api-zod";
 import { JORDAN_LABOR_LAW_FULL } from "./jordan-labor-law";
@@ -8,6 +9,39 @@ const contractsRouter = Router();
 const MIN_WAGE_JD = 290;
 const AI_MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 8192;
+
+/* ══════════════════════════════════════════════════════════
+   SHARED UTILITIES
+══════════════════════════════════════════════════════════ */
+
+const INJECTION_PATTERNS = [
+  /ignore (all |previous |above |prior )?instructions?/gi,
+  /disregard (all |previous |above |prior )?instructions?/gi,
+  /forget (all |previous |above |prior )?instructions?/gi,
+  /you are now/gi,
+  /act as (a |an )?/gi,
+  /system prompt/gi,
+  /\[INST\]/gi,
+  /<\|system\|>/gi,
+  /###\s*(instruction|system|prompt)/gi,
+];
+
+function sanitizeInput(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  let sanitized = value.trim();
+  for (const pattern of INJECTION_PATTERNS) {
+    sanitized = sanitized.replace(pattern, "[محتوى غير مسموح]");
+  }
+  return sanitized.slice(0, 2000);
+}
+
+function sanitizeObject<T extends Record<string, unknown>>(obj: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[k] = typeof v === "string" ? sanitizeInput(v) : v;
+  }
+  return out as T;
+}
 
 const STRICT_RULES_BASE = `
 القواعد الصارمة — يجب الالتزام بها حرفياً:
@@ -38,7 +72,8 @@ function validateEmploymentContract(text: string, salary: number) {
     if (!text.includes(el.key)) missingClauses.push(el.label);
   }
   if (text.length < 2000) warnings.push("العقد قصير بشكل غير عادي — تحقق من اكتمال البنود");
-  if (salary < MIN_WAGE_JD) warnings.push(`الراتب (${salary} د.أ) أقل من الحد الأدنى القانوني (${MIN_WAGE_JD} د.أ)`);
+  if (salary < MIN_WAGE_JD)
+    warnings.push(`الراتب (${salary} د.أ) أقل من الحد الأدنى القانوني (${MIN_WAGE_JD} د.أ)`);
   return { valid: missingClauses.length === 0, missingClauses, warnings };
 }
 
@@ -52,17 +87,19 @@ function buildEmploymentPrompt(data: {
   benefits?: string[]; hasConfidentialityClause: boolean;
   ipRights?: string; workLocation?: string; specialConditions?: string;
 }): string {
-  const probationText = data.probationPeriodDays === 0
-    ? "لا تُطبَّق فترة تجربة على هذا العقد."
-    : `فترة التجربة: ${data.probationPeriodDays} يوماً — وفقاً للمادة (35).`;
+  const probationText =
+    data.probationPeriodDays === 0
+      ? "لا تُطبَّق فترة تجربة على هذا العقد."
+      : `فترة التجربة: ${data.probationPeriodDays} يوماً — وفقاً للمادة (35).`;
 
   const benefitsList = data.benefits?.length
     ? data.benefits.join("، ")
     : "لا توجد مزايا إضافية خارج الراتب الأساسي.";
 
-  const salaryWarn = data.monthlySalary < MIN_WAGE_JD
-    ? `تحذير: الراتب أقل من الحد الأدنى (${MIN_WAGE_JD} د.أ) — أدرج هذا التحذير في العقد.`
-    : "";
+  const salaryWarn =
+    data.monthlySalary < MIN_WAGE_JD
+      ? `تحذير: الراتب أقل من الحد الأدنى (${MIN_WAGE_JD} د.أ) — أدرج هذا التحذير في العقد.`
+      : "";
 
   return `أنت كاتب عدل قانوني أردني متخصص. مهمتك صياغة عقد عمل رسمي استناداً إلى النص القانوني المرفق فقط.
 
@@ -145,15 +182,20 @@ contractsRouter.post("/contracts/generate", async (req, res) => {
     res.status(400).json({ error: "فترة التجربة لا يجوز أن تتجاوز 90 يوماً وفقاً للمادة (35)" });
     return;
   }
+  const data = sanitizeObject(parsed.data as unknown as Record<string, unknown>) as typeof parsed.data;
   try {
     const msg = await anthropic.messages.create({
-      model: AI_MODEL, max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildEmploymentPrompt(parsed.data) }],
+      model: AI_MODEL,
+      max_tokens: MAX_TOKENS,
+      messages: [{ role: "user", content: buildEmploymentPrompt(data) }],
     });
     const contractText = msg.content[0].type === "text" ? msg.content[0].text : "";
-    const validation = validateEmploymentContract(contractText, parsed.data.monthlySalary);
+    const validation = validateEmploymentContract(contractText, data.monthlySalary);
     if (!validation.valid) {
-      res.status(422).json({ error: "لم يستوفِ العقد المتطلبات القانونية", missingClauses: validation.missingClauses });
+      res.status(422).json({
+        error: "لم يستوفِ العقد المتطلبات القانونية",
+        missingClauses: validation.missingClauses,
+      });
       return;
     }
     res.json({ contract: contractText, validationWarnings: validation.warnings });
@@ -167,12 +209,29 @@ contractsRouter.post("/contracts/generate", async (req, res) => {
    RENTAL CONTRACT
 ══════════════════════════════════════════════════════════ */
 
-function buildRentalPrompt(d: {
-  landlordName: string; tenantName: string; propertyAddress: string;
-  propertyType: string; monthlyRent: number; contractDurationMonths: number;
-  startDate: string; depositAmount: number; paymentDayOfMonth: number;
-  furnitureStatus: string; specialConditions?: string;
-}): string {
+const RentalBody = z.object({
+  landlordName: z.string().min(2).max(200),
+  tenantName: z.string().min(2).max(200),
+  propertyAddress: z.string().min(4).max(500),
+  propertyType: z.enum(["شقة", "فيلا", "محل تجاري", "مستودع", "مكتب"]),
+  monthlyRent: z.coerce.number().positive().max(1_000_000),
+  contractDurationMonths: z.coerce.number().int().min(1).max(120).default(12),
+  startDate: z.string().min(2).max(50),
+  depositAmount: z.coerce.number().min(0).max(1_000_000).default(0),
+  paymentDayOfMonth: z.coerce.number().int().min(1).max(28).default(1),
+  furnitureStatus: z.enum(["مفروش", "نصف مفروش", "غير مفروش"]),
+  specialConditions: z.string().max(1000).optional(),
+});
+
+const RENTAL_REQUIRED = ["المؤجر", "المستأجر", "الإيجار", "التوقيع"];
+
+function validateGenericContract(text: string, requiredPhrases: string[]): { valid: boolean; missing: string[] } {
+  if (text.length < 1500) return { valid: false, missing: ["العقد قصير جداً — التوليد لم يكتمل"] };
+  const missing = requiredPhrases.filter((p) => !text.includes(p));
+  return { valid: missing.length === 0, missing };
+}
+
+function buildRentalPrompt(d: z.infer<typeof RentalBody>): string {
   return `أنت كاتب عدل أردني متخصص في عقود الإيجار.
 صِغ عقد إيجار رسمياً استناداً إلى القانون المدني الأردني رقم (43) لسنة 1976 وتعديلاته وقانون إيجار العقارات الأردني رقم (11) لسنة 1994 وتعديلاته.
 
@@ -194,17 +253,24 @@ ${STRICT_RULES_BASE}
 }
 
 contractsRouter.post("/contracts/generate-rental", async (req, res) => {
-  const d = req.body;
-  if (!d.landlordName || !d.tenantName || !d.propertyAddress || !d.monthlyRent || !d.startDate) {
-    res.status(400).json({ error: "بيانات ناقصة" });
+  const parsed = RentalBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "بيانات غير صحيحة", details: parsed.error.flatten() });
     return;
   }
+  const data = sanitizeObject(parsed.data as unknown as Record<string, unknown>) as z.infer<typeof RentalBody>;
   try {
     const msg = await anthropic.messages.create({
-      model: AI_MODEL, max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildRentalPrompt(d) }],
+      model: AI_MODEL,
+      max_tokens: MAX_TOKENS,
+      messages: [{ role: "user", content: buildRentalPrompt(data) }],
     });
     const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
+    const { valid, missing } = validateGenericContract(contract, RENTAL_REQUIRED);
+    if (!valid) {
+      res.status(422).json({ error: "لم يكتمل توليد العقد", missingClauses: missing });
+      return;
+    }
     res.json({ contract, validationWarnings: [] });
   } catch (err) {
     req.log.error({ err }, "Rental contract generation failed");
@@ -216,15 +282,24 @@ contractsRouter.post("/contracts/generate-rental", async (req, res) => {
    SERVICE / FREELANCE CONTRACT
 ══════════════════════════════════════════════════════════ */
 
-function buildServicePrompt(d: {
-  clientName: string; providerName: string; serviceDescription: string;
-  totalFee: number; paymentTerms: string; deliveryDeadline: string;
-  hasRevisions: boolean; revisionCount: number; ipOwnership: string;
-  hasConfidentialityClause: boolean; specialConditions?: string;
-}): string {
-  const revisionInfo = d.hasRevisions
-    ? `مسموح بـ ${d.revisionCount} مراجعات`
-    : "لا تشمل مراجعات";
+const ServiceBody = z.object({
+  clientName: z.string().min(2).max(200),
+  providerName: z.string().min(2).max(200),
+  serviceDescription: z.string().min(10).max(2000),
+  totalFee: z.coerce.number().positive().max(10_000_000),
+  paymentTerms: z.string().min(2).max(200),
+  deliveryDeadline: z.string().min(2).max(50),
+  hasRevisions: z.boolean().default(true),
+  revisionCount: z.coerce.number().int().min(0).max(20).default(2),
+  ipOwnership: z.string().min(2).max(200),
+  hasConfidentialityClause: z.boolean().default(true),
+  specialConditions: z.string().max(1000).optional(),
+});
+
+const SERVICE_REQUIRED = ["العميل", "الخدمة", "الأتعاب", "التوقيع"];
+
+function buildServicePrompt(d: z.infer<typeof ServiceBody>): string {
+  const revisionInfo = d.hasRevisions ? `مسموح بـ ${d.revisionCount} مراجعات` : "لا تشمل مراجعات";
   const confidentialityText = d.hasConfidentialityClause
     ? "يتضمن العقد بند سرية — يلتزم مقدم الخدمة بعدم إفشاء أسرار العميل."
     : "لا يتضمن بند سرية.";
@@ -253,17 +328,24 @@ ${STRICT_RULES_BASE}
 }
 
 contractsRouter.post("/contracts/generate-service", async (req, res) => {
-  const d = req.body;
-  if (!d.clientName || !d.providerName || !d.serviceDescription || !d.totalFee || !d.deliveryDeadline) {
-    res.status(400).json({ error: "بيانات ناقصة" });
+  const parsed = ServiceBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "بيانات غير صحيحة", details: parsed.error.flatten() });
     return;
   }
+  const data = sanitizeObject(parsed.data as unknown as Record<string, unknown>) as z.infer<typeof ServiceBody>;
   try {
     const msg = await anthropic.messages.create({
-      model: AI_MODEL, max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildServicePrompt(d) }],
+      model: AI_MODEL,
+      max_tokens: MAX_TOKENS,
+      messages: [{ role: "user", content: buildServicePrompt(data) }],
     });
     const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
+    const { valid, missing } = validateGenericContract(contract, SERVICE_REQUIRED);
+    if (!valid) {
+      res.status(422).json({ error: "لم يكتمل توليد العقد", missingClauses: missing });
+      return;
+    }
     res.json({ contract, validationWarnings: [] });
   } catch (err) {
     req.log.error({ err }, "Service contract generation failed");
@@ -275,14 +357,21 @@ contractsRouter.post("/contracts/generate-service", async (req, res) => {
    NDA CONTRACT
 ══════════════════════════════════════════════════════════ */
 
-function buildNdaPrompt(d: {
-  partyOneName: string; partyTwoName: string; purposeOfDisclosure: string;
-  confidentialityDurationYears: number; scopeOfConfidential: string;
-  permittedDisclosures?: string; penaltyAmount?: number; startDate: string;
-}): string {
-  const penaltyText = d.penaltyAmount
-    ? `${d.penaltyAmount} دينار أردني`
-    : "يُحدَّد وفق تقدير المحكمة";
+const NdaBody = z.object({
+  partyOneName: z.string().min(2).max(200),
+  partyTwoName: z.string().min(2).max(200),
+  purposeOfDisclosure: z.string().min(10).max(1000),
+  confidentialityDurationYears: z.coerce.number().int().min(1).max(20).default(2),
+  scopeOfConfidential: z.string().min(10).max(2000),
+  permittedDisclosures: z.string().max(1000).optional(),
+  penaltyAmount: z.coerce.number().min(0).max(10_000_000).optional(),
+  startDate: z.string().min(2).max(50),
+});
+
+const NDA_REQUIRED = ["الطرف الأول", "الطرف الثاني", "السرية", "التوقيع"];
+
+function buildNdaPrompt(d: z.infer<typeof NdaBody>): string {
+  const penaltyText = d.penaltyAmount ? `${d.penaltyAmount} دينار أردني` : "يُحدَّد وفق تقدير المحكمة";
   const permittedText = d.permittedDisclosures?.trim() || "لا توجد إفصاحات مسموحة إضافية";
 
   return `أنت محامٍ أردني متخصص في اتفاقيات عدم الإفصاح.
@@ -308,17 +397,24 @@ ${STRICT_RULES_BASE}
 }
 
 contractsRouter.post("/contracts/generate-nda", async (req, res) => {
-  const d = req.body;
-  if (!d.partyOneName || !d.partyTwoName || !d.purposeOfDisclosure || !d.scopeOfConfidential || !d.startDate) {
-    res.status(400).json({ error: "بيانات ناقصة" });
+  const parsed = NdaBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "بيانات غير صحيحة", details: parsed.error.flatten() });
     return;
   }
+  const data = sanitizeObject(parsed.data as unknown as Record<string, unknown>) as z.infer<typeof NdaBody>;
   try {
     const msg = await anthropic.messages.create({
-      model: AI_MODEL, max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildNdaPrompt(d) }],
+      model: AI_MODEL,
+      max_tokens: MAX_TOKENS,
+      messages: [{ role: "user", content: buildNdaPrompt(data) }],
     });
     const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
+    const { valid, missing } = validateGenericContract(contract, NDA_REQUIRED);
+    if (!valid) {
+      res.status(422).json({ error: "لم يكتمل توليد الاتفاقية", missingClauses: missing });
+      return;
+    }
     res.json({ contract, validationWarnings: [] });
   } catch (err) {
     req.log.error({ err }, "NDA generation failed");
@@ -330,12 +426,23 @@ contractsRouter.post("/contracts/generate-nda", async (req, res) => {
    SUPPLIER CONTRACT
 ══════════════════════════════════════════════════════════ */
 
-function buildSupplierPrompt(d: {
-  buyerName: string; supplierName: string; goodsOrServices: string;
-  totalContractValue: number; paymentTerms: string; deliverySchedule: string;
-  deliveryLocation: string; warrantyPeriodDays: number;
-  penaltyForDelay?: number; hasExclusivity: boolean; specialConditions?: string;
-}): string {
+const SupplierBody = z.object({
+  buyerName: z.string().min(2).max(200),
+  supplierName: z.string().min(2).max(200),
+  goodsOrServices: z.string().min(10).max(2000),
+  totalContractValue: z.coerce.number().positive().max(100_000_000),
+  paymentTerms: z.string().min(2).max(200),
+  deliverySchedule: z.string().min(2).max(500),
+  deliveryLocation: z.string().min(2).max(500),
+  warrantyPeriodDays: z.coerce.number().int().min(0).max(3650).default(30),
+  penaltyForDelay: z.coerce.number().min(0).max(100).optional(),
+  hasExclusivity: z.boolean().default(false),
+  specialConditions: z.string().max(1000).optional(),
+});
+
+const SUPPLIER_REQUIRED = ["المشتري", "المورد", "التوريد", "التوقيع"];
+
+function buildSupplierPrompt(d: z.infer<typeof SupplierBody>): string {
   const penaltyText = d.penaltyForDelay
     ? `${d.penaltyForDelay}% من قيمة العقد يومياً`
     : "لا توجد غرامة تأخير محددة";
@@ -368,17 +475,24 @@ ${STRICT_RULES_BASE}
 }
 
 contractsRouter.post("/contracts/generate-supplier", async (req, res) => {
-  const d = req.body;
-  if (!d.buyerName || !d.supplierName || !d.goodsOrServices || !d.totalContractValue || !d.deliveryLocation) {
-    res.status(400).json({ error: "بيانات ناقصة" });
+  const parsed = SupplierBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "بيانات غير صحيحة", details: parsed.error.flatten() });
     return;
   }
+  const data = sanitizeObject(parsed.data as unknown as Record<string, unknown>) as z.infer<typeof SupplierBody>;
   try {
     const msg = await anthropic.messages.create({
-      model: AI_MODEL, max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildSupplierPrompt(d) }],
+      model: AI_MODEL,
+      max_tokens: MAX_TOKENS,
+      messages: [{ role: "user", content: buildSupplierPrompt(data) }],
     });
     const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
+    const { valid, missing } = validateGenericContract(contract, SUPPLIER_REQUIRED);
+    if (!valid) {
+      res.status(422).json({ error: "لم يكتمل توليد العقد", missingClauses: missing });
+      return;
+    }
     res.json({ contract, validationWarnings: [] });
   } catch (err) {
     req.log.error({ err }, "Supplier contract generation failed");

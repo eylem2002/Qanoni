@@ -1,0 +1,21 @@
+Bugs found in v2 code — need fixing
+ContractForms.tsx uses bare fetch() + alert() for all 4 new contract types
+Employment contract uses the proper React Query hook (useGenerateContract) with toast notifications. The other 4 bypass this entirely and call fetch() directly, then show a jarring browser alert() on error. This is inconsistent, untestable, and breaks the UX completely on error.
+Bug — UX broken
+WhatsApp wa.me link will silently fail for full contracts
+Full contracts are 3,000–6,000 characters. URL-encoded that's 9,000–18,000 chars. Browser URL limits are ~2,000 chars. The link will either fail silently, get truncated, or be blocked. Needs to copy text to clipboard first, then open WhatsApp with a short prompt asking the lawyer to paste.
+Bug — will break
+No backend validation (Zod) on the 4 new routes
+Employment route uses GenerateContractBody.safeParse(). The rental/service/NDA/supplier routes do only a manual if(!d.fieldName) check. Any malformed JSON, wrong types, or missing fields will crash or produce garbage. Need Zod schemas for all 4.
+Bug — security risk
+No output validation on the 4 new contract types
+Employment has validateEmploymentContract() which checks for required clauses and returns 422 if missing. Rental, service, NDA, supplier have zero validation — they return whatever the AI produces with validationWarnings: [] hardcoded. A short or broken output goes straight to the user.
+Bug — quality risk
+Prompt injection risk through form fields
+User input (landlordName, serviceDescription, specialConditions etc.) goes directly into AI prompts without sanitization. A user can type "ignore all previous instructions and..." in any text field and manipulate the AI output. Need to strip or escape prompt-like patterns before interpolation.
+Security
+Separator imported in Home.tsx but only used once, unnecessarily
+Minor — unused import is dead code. The single Separator used in the employment form could use a plain hr or border instead.
+Minor
+No rate limiting on any API route
+Anyone can hammer all 5 routes with unlimited Claude API calls. No IP throttle, no per-session limit, no free-tier enforcement. Your Anthropic bill is uncapped.

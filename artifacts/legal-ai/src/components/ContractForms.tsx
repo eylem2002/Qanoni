@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { useToast } from "@/hooks/use-toast";
 
 const inputCls = "h-11 bg-background/50 focus:bg-background border-border/60 text-sm";
 const selectCls = "h-11 bg-background/50 focus:bg-background border-border/60 text-sm";
@@ -20,9 +21,54 @@ const selectCls = "h-11 bg-background/50 focus:bg-background border-border/60 te
 function FieldLabel({ label, required }: { label: string; required?: boolean }) {
   return (
     <FormLabel className="text-xs font-semibold text-gray-300">
-      {label} {required && <span className="text-red-400">*</span>}
+      {label}{required && <span className="text-red-400 mr-0.5"> *</span>}
     </FormLabel>
   );
+}
+
+type FormCallbacks = {
+  onResult: (contract: string) => void;
+  onLoadingChange: (loading: boolean) => void;
+};
+
+async function submitContract(
+  url: string,
+  payload: unknown,
+  callbacks: FormCallbacks,
+  successTitle: string,
+  toast: ReturnType<typeof useToast>["toast"],
+): Promise<void> {
+  callbacks.onLoadingChange(true);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data: { contract?: string; error?: string; missingClauses?: string[] } = await res.json();
+    if (!res.ok) {
+      const is422 = res.status === 422;
+      toast({
+        title: is422 ? "العقد غير مكتمل" : "حدث خطأ",
+        description:
+          is422 && data.missingClauses?.length
+            ? `البنود المفقودة: ${data.missingClauses.join("، ")}`
+            : data.error ?? "تعذر توليد العقد. الرجاء المحاولة مرة أخرى.",
+        variant: "destructive",
+      });
+      return;
+    }
+    callbacks.onResult(data.contract ?? "");
+    toast({ title: successTitle, description: "يمكنك الآن مراجعة العقد ونسخه أو تحميله." });
+  } catch {
+    toast({
+      title: "خطأ في الاتصال",
+      description: "تعذر الوصول إلى الخادم. تحقق من اتصالك بالإنترنت.",
+      variant: "destructive",
+    });
+  } finally {
+    callbacks.onLoadingChange(false);
+  }
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -41,57 +87,34 @@ const rentalSchema = z.object({
   furnitureStatus: z.string().min(1, "مطلوب"),
   specialConditions: z.string().optional(),
 });
-
 type RentalValues = z.infer<typeof rentalSchema>;
 
-export function RentalForm({ onResult, onLoadingChange }: {
-  onResult: (c: string) => void;
-  onLoadingChange: (v: boolean) => void;
-}) {
+export function RentalForm({ onResult, onLoadingChange }: FormCallbacks) {
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const form = useForm<RentalValues>({
     resolver: zodResolver(rentalSchema),
-    defaultValues: {
-      contractDurationMonths: 12,
-      depositAmount: 0,
-      paymentDayOfMonth: 1,
-    },
+    defaultValues: { contractDurationMonths: 12, depositAmount: 0, paymentDayOfMonth: 1 },
   });
 
   async function onSubmit(values: RentalValues) {
     setLoading(true);
-    onLoadingChange(true);
-    try {
-      const res = await fetch("/api/contracts/generate-rental", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "خطأ");
-      onResult(data.contract);
-    } catch {
-      alert("تعذر توليد العقد. الرجاء المحاولة مرة أخرى.");
-    } finally {
-      setLoading(false);
-      onLoadingChange(false);
-    }
+    await submitContract("/api/contracts/generate-rental", values, { onResult, onLoadingChange }, "تم توليد عقد الإيجار", toast);
+    setLoading(false);
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-1 gap-3">
-          <FormField control={form.control} name="landlordName" render={({ field }) => (
-            <FormItem><FieldLabel label="اسم المؤجر" required /><FormControl><Input className={inputCls} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="tenantName" render={({ field }) => (
-            <FormItem><FieldLabel label="اسم المستأجر" required /><FormControl><Input className={inputCls} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="propertyAddress" render={({ field }) => (
-            <FormItem><FieldLabel label="عنوان العقار" required /><FormControl><Input className={inputCls} placeholder="عمان، الجبيهة، شارع..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-        </div>
+        <FormField control={form.control} name="landlordName" render={({ field }) => (
+          <FormItem><FieldLabel label="اسم المؤجر" required /><FormControl><Input className={inputCls} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="tenantName" render={({ field }) => (
+          <FormItem><FieldLabel label="اسم المستأجر" required /><FormControl><Input className={inputCls} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="propertyAddress" render={({ field }) => (
+          <FormItem><FieldLabel label="عنوان العقار" required /><FormControl><Input className={inputCls} placeholder="عمان، الجبيهة، شارع..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
 
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="propertyType" render={({ field }) => (
@@ -100,11 +123,7 @@ export function RentalForm({ onResult, onLoadingChange }: {
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl><SelectTrigger className={selectCls}><SelectValue placeholder="اختر..." /></SelectTrigger></FormControl>
                 <SelectContent>
-                  <SelectItem value="شقة">شقة</SelectItem>
-                  <SelectItem value="فيلا">فيلا</SelectItem>
-                  <SelectItem value="محل تجاري">محل تجاري</SelectItem>
-                  <SelectItem value="مستودع">مستودع</SelectItem>
-                  <SelectItem value="مكتب">مكتب</SelectItem>
+                  {["شقة","فيلا","محل تجاري","مستودع","مكتب"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -116,9 +135,7 @@ export function RentalForm({ onResult, onLoadingChange }: {
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl><SelectTrigger className={selectCls}><SelectValue placeholder="اختر..." /></SelectTrigger></FormControl>
                 <SelectContent>
-                  <SelectItem value="مفروش">مفروش</SelectItem>
-                  <SelectItem value="نصف مفروش">نصف مفروش</SelectItem>
-                  <SelectItem value="غير مفروش">غير مفروش</SelectItem>
+                  {["مفروش","نصف مفروش","غير مفروش"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -145,15 +162,14 @@ export function RentalForm({ onResult, onLoadingChange }: {
         </div>
 
         <FormField control={form.control} name="paymentDayOfMonth" render={({ field }) => (
-          <FormItem><FieldLabel label="يوم استحقاق الإيجار (من كل شهر)" /><FormControl><Input className={inputCls} type="number" min={1} max={28} placeholder="1" {...field} /></FormControl><FormMessage /></FormItem>
+          <FormItem><FieldLabel label="يوم استحقاق الإيجار شهرياً" /><FormControl><Input className={inputCls} type="number" min={1} max={28} placeholder="1" {...field} /></FormControl><FormMessage /></FormItem>
         )} />
-
         <FormField control={form.control} name="specialConditions" render={({ field }) => (
           <FormItem><FieldLabel label="شروط خاصة (اختياري)" /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={3} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
         )} />
 
         <Button type="submit" className="w-full h-12 font-bold" disabled={loading}>
-          {loading ? <><Spinner className="ml-2 w-4 h-4" /> جاري التوليد...</> : "توليد عقد الإيجار"}
+          {loading ? <><Spinner className="ml-2 w-4 h-4" />جاري التوليد...</> : "توليد عقد الإيجار"}
         </Button>
       </form>
     </Form>
@@ -176,55 +192,35 @@ const serviceSchema = z.object({
   hasConfidentialityClause: z.boolean().default(true),
   specialConditions: z.string().optional(),
 });
-
 type ServiceValues = z.infer<typeof serviceSchema>;
 
-export function ServiceForm({ onResult, onLoadingChange }: {
-  onResult: (c: string) => void;
-  onLoadingChange: (v: boolean) => void;
-}) {
+export function ServiceForm({ onResult, onLoadingChange }: FormCallbacks) {
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const form = useForm<ServiceValues>({
     resolver: zodResolver(serviceSchema),
     defaultValues: { hasRevisions: true, revisionCount: 2, hasConfidentialityClause: true },
   });
-
   const hasRevisions = form.watch("hasRevisions");
 
   async function onSubmit(values: ServiceValues) {
     setLoading(true);
-    onLoadingChange(true);
-    try {
-      const res = await fetch("/api/contracts/generate-service", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "خطأ");
-      onResult(data.contract);
-    } catch {
-      alert("تعذر توليد العقد. الرجاء المحاولة مرة أخرى.");
-    } finally {
-      setLoading(false);
-      onLoadingChange(false);
-    }
+    await submitContract("/api/contracts/generate-service", values, { onResult, onLoadingChange }, "تم توليد عقد الخدمات", toast);
+    setLoading(false);
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-1 gap-3">
-          <FormField control={form.control} name="clientName" render={({ field }) => (
-            <FormItem><FieldLabel label="اسم العميل" required /><FormControl><Input className={inputCls} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="providerName" render={({ field }) => (
-            <FormItem><FieldLabel label="اسم مقدم الخدمة" required /><FormControl><Input className={inputCls} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="serviceDescription" render={({ field }) => (
-            <FormItem><FieldLabel label="وصف الخدمة" required /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={3} placeholder="تصميم موقع إلكتروني..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-        </div>
+        <FormField control={form.control} name="clientName" render={({ field }) => (
+          <FormItem><FieldLabel label="اسم العميل" required /><FormControl><Input className={inputCls} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="providerName" render={({ field }) => (
+          <FormItem><FieldLabel label="اسم مقدم الخدمة" required /><FormControl><Input className={inputCls} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="serviceDescription" render={({ field }) => (
+          <FormItem><FieldLabel label="وصف الخدمة" required /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={3} placeholder="تصميم موقع..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
 
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="totalFee" render={({ field }) => (
@@ -252,7 +248,7 @@ export function ServiceForm({ onResult, onLoadingChange }: {
 
         <FormField control={form.control} name="ipOwnership" render={({ field }) => (
           <FormItem>
-            <FieldLabel label="ملكية المخرجات (حقوق الملكية الفكرية)" required />
+            <FieldLabel label="ملكية المخرجات" required />
             <Select onValueChange={field.onChange} defaultValue={field.value}>
               <FormControl><SelectTrigger className={selectCls}><SelectValue placeholder="اختر..." /></SelectTrigger></FormControl>
               <SelectContent>
@@ -268,7 +264,7 @@ export function ServiceForm({ onResult, onLoadingChange }: {
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="hasRevisions" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/60 bg-background/50 px-4 py-3">
-              <div><FormLabel className="text-xs font-semibold text-gray-200">مراجعات</FormLabel></div>
+              <FormLabel className="text-xs font-semibold text-gray-200">مراجعات</FormLabel>
               <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
           )} />
@@ -281,17 +277,16 @@ export function ServiceForm({ onResult, onLoadingChange }: {
 
         <FormField control={form.control} name="hasConfidentialityClause" render={({ field }) => (
           <FormItem className="flex items-center justify-between rounded-lg border border-border/60 bg-background/50 px-4 py-3">
-            <div><FormLabel className="text-xs font-semibold text-gray-200">بند السرية</FormLabel></div>
+            <FormLabel className="text-xs font-semibold text-gray-200">بند السرية</FormLabel>
             <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
           </FormItem>
         )} />
-
         <FormField control={form.control} name="specialConditions" render={({ field }) => (
           <FormItem><FieldLabel label="شروط خاصة (اختياري)" /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={2} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
         )} />
 
         <Button type="submit" className="w-full h-12 font-bold" disabled={loading}>
-          {loading ? <><Spinner className="ml-2 w-4 h-4" /> جاري التوليد...</> : "توليد عقد الخدمات"}
+          {loading ? <><Spinner className="ml-2 w-4 h-4" />جاري التوليد...</> : "توليد عقد الخدمات"}
         </Button>
       </form>
     </Form>
@@ -311,13 +306,10 @@ const ndaSchema = z.object({
   penaltyAmount: z.coerce.number().optional(),
   startDate: z.string().min(2, "مطلوب"),
 });
-
 type NdaValues = z.infer<typeof ndaSchema>;
 
-export function NdaForm({ onResult, onLoadingChange }: {
-  onResult: (c: string) => void;
-  onLoadingChange: (v: boolean) => void;
-}) {
+export function NdaForm({ onResult, onLoadingChange }: FormCallbacks) {
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const form = useForm<NdaValues>({
     resolver: zodResolver(ndaSchema),
@@ -326,44 +318,28 @@ export function NdaForm({ onResult, onLoadingChange }: {
 
   async function onSubmit(values: NdaValues) {
     setLoading(true);
-    onLoadingChange(true);
-    try {
-      const res = await fetch("/api/contracts/generate-nda", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "خطأ");
-      onResult(data.contract);
-    } catch {
-      alert("تعذر توليد العقد. الرجاء المحاولة مرة أخرى.");
-    } finally {
-      setLoading(false);
-      onLoadingChange(false);
-    }
+    await submitContract("/api/contracts/generate-nda", values, { onResult, onLoadingChange }, "تم توليد اتفاقية السرية", toast);
+    setLoading(false);
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-1 gap-3">
-          <FormField control={form.control} name="partyOneName" render={({ field }) => (
-            <FormItem><FieldLabel label="الطرف الأول — المُفصِح" required /><FormControl><Input className={inputCls} placeholder="الجهة أو الشخص الذي يُفصح عن المعلومات" {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="partyTwoName" render={({ field }) => (
-            <FormItem><FieldLabel label="الطرف الثاني — المُستقبِل" required /><FormControl><Input className={inputCls} placeholder="الجهة أو الشخص الذي يستقبل المعلومات" {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="purposeOfDisclosure" render={({ field }) => (
-            <FormItem><FieldLabel label="الغرض من الإفصاح" required /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={2} placeholder="دراسة شراكة تجارية مشتركة..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="scopeOfConfidential" render={({ field }) => (
-            <FormItem><FieldLabel label="نطاق المعلومات السرية" required /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={2} placeholder="البيانات المالية، خطط العمل، قواعد البيانات..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="permittedDisclosures" render={({ field }) => (
-            <FormItem><FieldLabel label="الإفصاحات المسموحة (اختياري)" /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={2} placeholder="الموظفون المباشرون المعنيون فقط..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-        </div>
+        <FormField control={form.control} name="partyOneName" render={({ field }) => (
+          <FormItem><FieldLabel label="الطرف الأول — المُفصِح" required /><FormControl><Input className={inputCls} placeholder="الجهة أو الشخص الذي يُفصح" {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="partyTwoName" render={({ field }) => (
+          <FormItem><FieldLabel label="الطرف الثاني — المُستقبِل" required /><FormControl><Input className={inputCls} placeholder="الجهة أو الشخص الذي يستقبل" {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="purposeOfDisclosure" render={({ field }) => (
+          <FormItem><FieldLabel label="الغرض من الإفصاح" required /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={2} placeholder="دراسة شراكة تجارية..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="scopeOfConfidential" render={({ field }) => (
+          <FormItem><FieldLabel label="نطاق المعلومات السرية" required /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={2} placeholder="البيانات المالية، خطط العمل..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="permittedDisclosures" render={({ field }) => (
+          <FormItem><FieldLabel label="الإفصاحات المسموحة (اختياري)" /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={2} placeholder="الموظفون المعنيون مباشرة..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
 
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="confidentialityDurationYears" render={({ field }) => (
@@ -383,7 +359,7 @@ export function NdaForm({ onResult, onLoadingChange }: {
         </div>
 
         <Button type="submit" className="w-full h-12 font-bold" disabled={loading}>
-          {loading ? <><Spinner className="ml-2 w-4 h-4" /> جاري التوليد...</> : "توليد اتفاقية السرية"}
+          {loading ? <><Spinner className="ml-2 w-4 h-4" />جاري التوليد...</> : "توليد اتفاقية السرية"}
         </Button>
       </form>
     </Form>
@@ -406,13 +382,10 @@ const supplierSchema = z.object({
   hasExclusivity: z.boolean().default(false),
   specialConditions: z.string().optional(),
 });
-
 type SupplierValues = z.infer<typeof supplierSchema>;
 
-export function SupplierForm({ onResult, onLoadingChange }: {
-  onResult: (c: string) => void;
-  onLoadingChange: (v: boolean) => void;
-}) {
+export function SupplierForm({ onResult, onLoadingChange }: FormCallbacks) {
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const form = useForm<SupplierValues>({
     resolver: zodResolver(supplierSchema),
@@ -421,38 +394,22 @@ export function SupplierForm({ onResult, onLoadingChange }: {
 
   async function onSubmit(values: SupplierValues) {
     setLoading(true);
-    onLoadingChange(true);
-    try {
-      const res = await fetch("/api/contracts/generate-supplier", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "خطأ");
-      onResult(data.contract);
-    } catch {
-      alert("تعذر توليد العقد. الرجاء المحاولة مرة أخرى.");
-    } finally {
-      setLoading(false);
-      onLoadingChange(false);
-    }
+    await submitContract("/api/contracts/generate-supplier", values, { onResult, onLoadingChange }, "تم توليد عقد التوريد", toast);
+    setLoading(false);
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-1 gap-3">
-          <FormField control={form.control} name="buyerName" render={({ field }) => (
-            <FormItem><FieldLabel label="اسم المشتري / الجهة" required /><FormControl><Input className={inputCls} placeholder="شركة / مؤسسة..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="supplierName" render={({ field }) => (
-            <FormItem><FieldLabel label="اسم المورد" required /><FormControl><Input className={inputCls} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="goodsOrServices" render={({ field }) => (
-            <FormItem><FieldLabel label="وصف البضاعة / الخدمات" required /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={3} placeholder="1000 كيلو قهوة نوع X، درجة A..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-        </div>
+        <FormField control={form.control} name="buyerName" render={({ field }) => (
+          <FormItem><FieldLabel label="اسم المشتري / الجهة" required /><FormControl><Input className={inputCls} placeholder="شركة / مؤسسة..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="supplierName" render={({ field }) => (
+          <FormItem><FieldLabel label="اسم المورد" required /><FormControl><Input className={inputCls} placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="goodsOrServices" render={({ field }) => (
+          <FormItem><FieldLabel label="وصف البضاعة / الخدمات" required /><FormControl><Textarea className="resize-none bg-background/50 border-border/60 text-sm" rows={3} placeholder="1000 كيلو قهوة نوع X..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
 
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="totalContractValue" render={({ field }) => (
@@ -479,18 +436,16 @@ export function SupplierForm({ onResult, onLoadingChange }: {
           </FormItem>
         )} />
 
-        <div className="grid grid-cols-1 gap-3">
-          <FormField control={form.control} name="deliverySchedule" render={({ field }) => (
-            <FormItem><FieldLabel label="جدول التوريد / مواعيد التسليم" required /><FormControl><Input className={inputCls} placeholder="دفعة شهرية / تسليم دفعة واحدة بتاريخ..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="deliveryLocation" render={({ field }) => (
-            <FormItem><FieldLabel label="مكان التسليم" required /><FormControl><Input className={inputCls} placeholder="مستودع الشركة في عمان..." {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-        </div>
+        <FormField control={form.control} name="deliverySchedule" render={({ field }) => (
+          <FormItem><FieldLabel label="جدول التوريد / مواعيد التسليم" required /><FormControl><Input className={inputCls} placeholder="دفعة شهرية / تسليم بتاريخ..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="deliveryLocation" render={({ field }) => (
+          <FormItem><FieldLabel label="مكان التسليم" required /><FormControl><Input className={inputCls} placeholder="مستودع الشركة في عمان..." {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
 
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="penaltyForDelay" render={({ field }) => (
-            <FormItem><FieldLabel label="غرامة التأخير (% يومياً) — اختياري" /><FormControl><Input className={inputCls} type="number" step="0.1" placeholder="0.5" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FieldLabel label="غرامة التأخير (% يومياً)" /><FormControl><Input className={inputCls} type="number" step="0.1" placeholder="0.5" {...field} /></FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="hasExclusivity" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/60 bg-background/50 px-4 py-3 mt-5">
@@ -505,7 +460,7 @@ export function SupplierForm({ onResult, onLoadingChange }: {
         )} />
 
         <Button type="submit" className="w-full h-12 font-bold" disabled={loading}>
-          {loading ? <><Spinner className="ml-2 w-4 h-4" /> جاري التوليد...</> : "توليد عقد التوريد"}
+          {loading ? <><Spinner className="ml-2 w-4 h-4" />جاري التوليد...</> : "توليد عقد التوريد"}
         </Button>
       </form>
     </Form>

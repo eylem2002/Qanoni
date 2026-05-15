@@ -21,7 +21,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RentalForm, ServiceForm, NdaForm, SupplierForm } from "@/components/ContractForms";
 
@@ -218,8 +217,20 @@ export default function Home() {
 
   const handleWhatsApp = () => {
     if (!generatedContract) return;
-    const encoded = encodeURIComponent(generatedContract);
-    window.open(`https://wa.me/?text=${encoded}`, "_blank");
+    navigator.clipboard.writeText(generatedContract).then(() => {
+      const msg = encodeURIComponent("مرحباً، أرسل لك عقداً قانونياً مُولَّداً بالذكاء الاصطناعي. النص منسوخ في الحافظة — الصقه هنا:");
+      window.open(`https://wa.me/?text=${msg}`, "_blank");
+      toast({
+        title: "تم النسخ وفتح واتساب",
+        description: "الصق نص العقد في محادثة واتساب",
+      });
+    }).catch(() => {
+      toast({
+        title: "تعذر النسخ",
+        description: "الرجاء نسخ العقد يدوياً ثم مشاركته عبر واتساب.",
+        variant: "destructive",
+      });
+    });
   };
 
   const inputCls = "h-11 bg-background/50 focus:bg-background border-border/60 text-sm";
@@ -294,7 +305,7 @@ export default function Home() {
                       </FormItem>
                     )} />
 
-                    <Separator className="opacity-30" />
+                    <div className="border-t border-border/30" />
 
                     <FormField control={form.control} name="employeeName" render={({ field }) => (
                       <FormItem>

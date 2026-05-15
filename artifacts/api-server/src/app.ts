@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import rateLimit from "express-rate-limit";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -25,9 +26,20 @@ app.use(
     },
   }),
 );
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+const contractRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "لقد تجاوزت الحد المسموح به. الرجاء الانتظار 10 دقائق قبل المحاولة مجدداً." },
+});
+
+app.use("/api/contracts/generate", contractRateLimit);
 
 app.use("/api", router);
 
