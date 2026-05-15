@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from "react";
-import { Scale, Upload, FileText, AlertTriangle, CheckCircle, AlertCircle, X } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Scale, Upload, FileText, AlertTriangle, CheckCircle, AlertCircle, X, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
@@ -54,6 +54,34 @@ export default function ContractReviewer() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<ReviewResult | null>(null);
   const [filter, setFilter] = useState<"all" | "green" | "yellow" | "red">("all");
+  const [reportLoading, setReportLoading] = useState(false);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("reviewContract");
+    const label = sessionStorage.getItem("reviewContractLabel");
+    if (stored && stored.length > 100) {
+      sessionStorage.removeItem("reviewContract");
+      sessionStorage.removeItem("reviewContractLabel");
+      setIsLoading(true);
+      fetch("/api/contracts/review-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contractText: stored, label: label ?? "" }),
+      })
+        .then((r) => r.json())
+        .then((data: { findings?: Finding[]; error?: string }) => {
+          if (data.findings) {
+            setResult({ findings: data.findings, charCount: stored.length, filename: label ?? "عقد مولَّد" });
+            toast({ title: "تمت المراجعة", description: `تم تحليل ${data.findings.length} بنداً` });
+          } else {
+            toast({ title: "خطأ", description: data.error ?? "فشل التحليل", variant: "destructive" });
+          }
+        })
+        .catch(() => toast({ title: "خطأ في الاتصال", variant: "destructive" } as Parameters<typeof toast>[0]))
+        .finally(() => setIsLoading(false));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const acceptedTypes = ".pdf,.docx,.doc,.txt";
 
@@ -119,6 +147,36 @@ export default function ContractReviewer() {
       setIsLoading(false);
     }
   }
+
+  const handleDownloadReport = async () => {
+    if (!result) return;
+    setReportLoading(true);
+    try {
+      const res = await fetch("/api/contracts/export-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ findings: result.findings, filename: result.filename }),
+      });
+      if (!res.ok) {
+        toast({ title: "خطأ في التصدير", variant: "destructive" });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `تقرير-مراجعة-${result.filename}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "تم التصدير", description: "تم تحميل تقرير المراجعة بصيغة Word" });
+    } catch {
+      toast({ title: "خطأ", description: "تعذر الاتصال بالخادم", variant: "destructive" });
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   const filteredFindings = result?.findings.filter((f) => filter === "all" || f.status === filter) ?? [];
 
@@ -224,10 +282,20 @@ export default function ContractReviewer() {
         <div className="lg:col-span-7">
           <Card className="h-full border-border/50 bg-card/40 backdrop-blur-xl shadow-2xl flex flex-col rounded-2xl min-h-[500px]">
             <CardHeader className="border-b border-border/50 bg-secondary/30 py-4 shrink-0">
-              <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" />
-                تقرير المخاطر
-              </CardTitle>
+              <div className="flex items-center justify-between w-full">
+                <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  تقرير المخاطر
+                </CardTitle>
+                {result && (
+                  <Button variant="default" size="sm" onClick={handleDownloadReport} disabled={reportLoading} className="h-8 px-3 text-xs">
+                    {reportLoading
+                      ? <><Spinner className="ml-1.5 w-3 h-3 text-primary-foreground" />جاري التصدير...</>
+                      : <><FileDown className="w-3.5 h-3.5 ml-1.5" />تحميل التقرير</>
+                    }
+                  </Button>
+                )}
+              </div>
             </CardHeader>
 
             {counts && (

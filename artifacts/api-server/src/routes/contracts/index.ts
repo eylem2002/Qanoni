@@ -33,7 +33,8 @@ function sanitizeInput(value: unknown): unknown {
   for (const pattern of INJECTION_PATTERNS) {
     sanitized = sanitized.replace(pattern, "[محتوى غير مسموح]");
   }
-  return sanitized.slice(0, 2000);
+  return sanitized;
+  // Note: length limits are enforced by Zod schemas (.max()) before this runs
 }
 
 function sanitizeObject<T extends Record<string, unknown>>(obj: T): T {
@@ -498,6 +499,39 @@ contractsRouter.post("/contracts/generate-supplier", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Supplier contract generation failed");
     res.status(500).json({ error: "فشل توليد عقد التوريد." });
+  }
+});
+
+/* ══════════════════════════════════════════════════════════
+   EXPORT REPORT
+══════════════════════════════════════════════════════════ */
+
+contractsRouter.post("/contracts/export-report", async (req, res) => {
+  const { findings, filename } = req.body as { findings?: unknown[]; filename?: string };
+
+  if (!findings || !Array.isArray(findings) || findings.length === 0) {
+    res.status(400).json({ error: "لا توجد نتائج للتصدير" });
+    return;
+  }
+
+  try {
+    const { buildReportDocument } = await import("./word-export");
+    const generatedDate = new Date().toLocaleDateString("ar-JO", {
+      year: "numeric", month: "long", day: "numeric",
+    });
+    const buffer = await buildReportDocument({
+      findings: findings as Parameters<typeof buildReportDocument>[0]["findings"],
+      filename: filename ?? "عقد",
+      generatedDate,
+    });
+    const safeFilename = encodeURIComponent(`تقرير-مراجعة-${filename ?? "عقد"}.docx`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${safeFilename}`);
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    req.log.error({ err }, "Report export failed");
+    res.status(500).json({ error: "فشل تصدير التقرير" });
   }
 });
 

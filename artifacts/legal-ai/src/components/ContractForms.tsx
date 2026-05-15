@@ -27,7 +27,7 @@ function FieldLabel({ label, required }: { label: string; required?: boolean }) 
 }
 
 type FormCallbacks = {
-  onResult: (contract: string) => void;
+  onResult: (contract: string, partyName: string) => void;
   onLoadingChange: (loading: boolean) => void;
 };
 
@@ -37,6 +37,7 @@ async function submitContract(
   callbacks: FormCallbacks,
   successTitle: string,
   toast: ReturnType<typeof useToast>["toast"],
+  partyName: string = "",
 ): Promise<void> {
   callbacks.onLoadingChange(true);
   try {
@@ -58,7 +59,7 @@ async function submitContract(
       });
       return;
     }
-    callbacks.onResult(data.contract ?? "");
+    callbacks.onResult(data.contract ?? "", partyName);
     toast({ title: successTitle, description: "يمكنك الآن مراجعة العقد ونسخه أو تحميله." });
   } catch {
     toast({
@@ -99,7 +100,7 @@ export function RentalForm({ onResult, onLoadingChange }: FormCallbacks) {
 
   async function onSubmit(values: RentalValues) {
     setLoading(true);
-    await submitContract("/api/contracts/generate-rental", values, { onResult, onLoadingChange }, "تم توليد عقد الإيجار", toast);
+    await submitContract("/api/contracts/generate-rental", values, { onResult, onLoadingChange }, "تم توليد عقد الإيجار", toast, values.tenantName || "مستأجر");
     setLoading(false);
   }
 
@@ -205,7 +206,7 @@ export function ServiceForm({ onResult, onLoadingChange }: FormCallbacks) {
 
   async function onSubmit(values: ServiceValues) {
     setLoading(true);
-    await submitContract("/api/contracts/generate-service", values, { onResult, onLoadingChange }, "تم توليد عقد الخدمات", toast);
+    await submitContract("/api/contracts/generate-service", values, { onResult, onLoadingChange }, "تم توليد عقد الخدمات", toast, values.clientName || "عميل");
     setLoading(false);
   }
 
@@ -318,7 +319,7 @@ export function NdaForm({ onResult, onLoadingChange }: FormCallbacks) {
 
   async function onSubmit(values: NdaValues) {
     setLoading(true);
-    await submitContract("/api/contracts/generate-nda", values, { onResult, onLoadingChange }, "تم توليد اتفاقية السرية", toast);
+    await submitContract("/api/contracts/generate-nda", values, { onResult, onLoadingChange }, "تم توليد اتفاقية السرية", toast, values.partyOneName || "الطرف الأول");
     setLoading(false);
   }
 
@@ -394,7 +395,7 @@ export function SupplierForm({ onResult, onLoadingChange }: FormCallbacks) {
 
   async function onSubmit(values: SupplierValues) {
     setLoading(true);
-    await submitContract("/api/contracts/generate-supplier", values, { onResult, onLoadingChange }, "تم توليد عقد التوريد", toast);
+    await submitContract("/api/contracts/generate-supplier", values, { onResult, onLoadingChange }, "تم توليد عقد التوريد", toast, values.supplierName || "مورد");
     setLoading(false);
   }
 

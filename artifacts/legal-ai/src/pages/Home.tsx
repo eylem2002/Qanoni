@@ -108,6 +108,8 @@ export default function Home() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [contractType, setContractType] = useState<ContractType>("employment");
   const [nonEmploymentLoading, setNonEmploymentLoading] = useState(false);
+  const [currentPartyName, setCurrentPartyName] = useState<string>("");
+  const [wordLoading, setWordLoading] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -133,6 +135,7 @@ export default function Home() {
       onSuccess: (result) => {
         setGeneratedContract(result.contract);
         setValidationWarnings(result.validationWarnings ?? []);
+        setCurrentPartyName(form.getValues().employeeName || "موظف");
         toast({
           title: "تم توليد العقد بنجاح",
           description:
@@ -173,11 +176,8 @@ export default function Home() {
 
   const handleDownloadWord = async () => {
     if (!generatedContract) return;
-    const values = form.getValues();
-    const partyName =
-      contractType === "employment"
-        ? values.employeeName || "موظف"
-        : values.employerName || "وثيقة";
+    setWordLoading(true);
+    const partyName = currentPartyName || "وثيقة";
 
     try {
       const res = await fetch("/api/contracts/export-word", {
@@ -208,7 +208,16 @@ export default function Home() {
       toast({ title: "تم التصدير", description: "تم تحميل الوثيقة بصيغة Word (.docx)" });
     } catch {
       toast({ title: "خطأ", description: "تعذر الاتصال بالخادم", variant: "destructive" });
+    } finally {
+      setWordLoading(false);
     }
+  };
+
+  const handleReviewThis = () => {
+    if (!generatedContract) return;
+    sessionStorage.setItem("reviewContract", generatedContract);
+    sessionStorage.setItem("reviewContractLabel", CONTRACT_TYPE_LABEL[contractType]);
+    window.location.href = "/review";
   };
 
   const handleWhatsApp = () => {
@@ -273,7 +282,7 @@ export default function Home() {
                     <button
                       key={t.value}
                       type="button"
-                      onClick={() => { setContractType(t.value); setGeneratedContract(null); setValidationWarnings([]); }}
+                      onClick={() => { setContractType(t.value); setGeneratedContract(null); setValidationWarnings([]); setCurrentPartyName(""); setNonEmploymentLoading(false); }}
                       className={`rounded-lg border px-2 py-2.5 text-xs font-medium transition-all text-center ${
                         contractType === t.value
                           ? "border-primary bg-primary/10 text-primary"
@@ -567,25 +576,25 @@ export default function Home() {
               {/* ══ NON-EMPLOYMENT FORMS ══ */}
               {contractType === "rental" && (
                 <RentalForm
-                  onResult={(c) => { setGeneratedContract(c); setValidationWarnings([]); toast({ title: "تم توليد عقد الإيجار" }); }}
+                  onResult={(c, name) => { setGeneratedContract(c); setCurrentPartyName(name); setValidationWarnings([]); toast({ title: "تم توليد عقد الإيجار" }); }}
                   onLoadingChange={setNonEmploymentLoading}
                 />
               )}
               {contractType === "service" && (
                 <ServiceForm
-                  onResult={(c) => { setGeneratedContract(c); setValidationWarnings([]); toast({ title: "تم توليد عقد الخدمات" }); }}
+                  onResult={(c, name) => { setGeneratedContract(c); setCurrentPartyName(name); setValidationWarnings([]); toast({ title: "تم توليد عقد الخدمات" }); }}
                   onLoadingChange={setNonEmploymentLoading}
                 />
               )}
               {contractType === "nda" && (
                 <NdaForm
-                  onResult={(c) => { setGeneratedContract(c); setValidationWarnings([]); toast({ title: "تم توليد اتفاقية السرية" }); }}
+                  onResult={(c, name) => { setGeneratedContract(c); setCurrentPartyName(name); setValidationWarnings([]); toast({ title: "تم توليد اتفاقية السرية" }); }}
                   onLoadingChange={setNonEmploymentLoading}
                 />
               )}
               {contractType === "supplier" && (
                 <SupplierForm
-                  onResult={(c) => { setGeneratedContract(c); setValidationWarnings([]); toast({ title: "تم توليد عقد التوريد" }); }}
+                  onResult={(c, name) => { setGeneratedContract(c); setCurrentPartyName(name); setValidationWarnings([]); toast({ title: "تم توليد عقد التوريد" }); }}
                   onLoadingChange={setNonEmploymentLoading}
                 />
               )}
@@ -607,14 +616,21 @@ export default function Home() {
                     {copied ? <Check className="w-3.5 h-3.5 ml-1.5 text-green-500" /> : <Copy className="w-3.5 h-3.5 ml-1.5 text-gray-300" />}
                     {copied ? "تم" : "نسخ"}
                   </Button>
-                  <Button variant="default" size="sm" onClick={handleDownloadWord} className="h-9 px-3 shadow-md text-xs">
-                    <FileDown className="w-3.5 h-3.5 ml-1.5" />
-                    تحميل Word
+                  <Button variant="default" size="sm" onClick={handleDownloadWord} disabled={wordLoading} className="h-9 px-3 shadow-md text-xs">
+                    {wordLoading
+                      ? <><Spinner className="ml-1.5 w-3.5 h-3.5 text-primary-foreground" />جاري التصدير...</>
+                      : <><FileDown className="w-3.5 h-3.5 ml-1.5" />تحميل Word</>
+                    }
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleWhatsApp}
                     className="h-9 px-3 border-green-500/40 hover:bg-green-500/10 text-green-400 text-xs">
                     <MessageCircle className="w-3.5 h-3.5 ml-1.5" />
                     واتساب
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleReviewThis}
+                    className="h-9 px-3 border-purple-500/40 hover:bg-purple-500/10 text-purple-400 text-xs">
+                    <Scale className="w-3.5 h-3.5 ml-1.5" />
+                    مراجعة
                   </Button>
                 </div>
               )}

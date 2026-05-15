@@ -129,4 +129,40 @@ reviewRouter.post(
   }
 );
 
+// Accepts plain JSON { contractText: string } — used when reviewing a just-generated contract
+reviewRouter.post("/contracts/review-text", async (req, res) => {
+  const { contractText } = req.body as { contractText?: string };
+
+  if (!contractText || typeof contractText !== "string" || contractText.trim().length < 100) {
+    res.status(400).json({ error: "النص مفقود أو قصير جداً" });
+    return;
+  }
+
+  try {
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4096,
+      messages: [{ role: "user", content: buildReviewPrompt(contractText) }],
+    });
+
+    const rawText = message.content[0].type === "text" ? message.content[0].text : "";
+    const cleaned = rawText.replace(/```json|```/gi, "").trim();
+
+    let findings: unknown[];
+    try {
+      findings = JSON.parse(cleaned);
+      if (!Array.isArray(findings)) throw new Error("not an array");
+    } catch {
+      req.log.error({ rawText }, "Failed to parse review-text JSON");
+      res.status(500).json({ error: "تعذر تحليل نتيجة المراجعة. حاول مرة أخرى." });
+      return;
+    }
+
+    res.json({ findings, charCount: contractText.length, filename: "عقد مولَّد" });
+  } catch (err) {
+    req.log.error({ err }, "Contract review-text failed");
+    res.status(500).json({ error: "فشل في مراجعة العقد." });
+  }
+});
+
 export default reviewRouter;
