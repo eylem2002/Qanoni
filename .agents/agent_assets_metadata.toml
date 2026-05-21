@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "6-gzBakoO-LoHfnx6EBPG"
+uri = "file://PROJECT_CONTEXT.md"
+type = "text"
+title = "PROJECT_CONTEXT.md — Complete Technical Context"
