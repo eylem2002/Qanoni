@@ -4,6 +4,10 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { GenerateContractBody } from "@workspace/api-zod";
 import { JORDAN_LABOR_LAW_FULL } from "./jordan-labor-law";
 import { buildWordDocument } from "./word-export";
+import {
+  retrieveArticlesForContract,
+  formatArticlesForPrompt,
+} from "../../lib/law-client";
 
 const contractsRouter = Router();
 
@@ -88,7 +92,7 @@ function buildEmploymentPrompt(data: {
   annualLeaveDays: number; hasBonus: boolean; hasOvertime: boolean;
   benefits?: string[]; hasConfidentialityClause: boolean;
   ipRights?: string; workLocation?: string; specialConditions?: string;
-}): string {
+}, articlesText: string): string {
   const probationText =
     data.probationPeriodDays === 0
       ? "لا تُطبَّق فترة تجربة على هذا العقد."
@@ -112,7 +116,7 @@ ${STRICT_RULES_BASE}
 ══════════════════════════════════════════════════════
 النص القانوني المرجعي الوحيد:
 ══════════════════════════════════════════════════════
-${JORDAN_LABOR_LAW_FULL}
+${articlesText}
 ══════════════════════════════════════════════════════
 
 بيانات العقد:
@@ -185,11 +189,20 @@ contractsRouter.post("/contracts/generate", async (req, res) => {
     return;
   }
   const data = sanitizeObject(parsed.data as unknown as Record<string, unknown>) as typeof parsed.data;
+  let articlesText = JORDAN_LABOR_LAW_FULL;
+  const lawWarnings: string[] = [];
+  try {
+    const ragResult = await retrieveArticlesForContract("employment");
+    articlesText = formatArticlesForPrompt(ragResult.articles);
+  } catch (error) {
+    req.log.warn({ error: (error as Error).message }, "Failed to retrieve articles from law system, using fallback");
+    lawWarnings.push("تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.");
+  }
   try {
     const msg = await anthropic.messages.create({
       model: AI_MODEL,
       max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildEmploymentPrompt(data) }],
+      messages: [{ role: "user", content: buildEmploymentPrompt(data, articlesText) }],
     });
     const contractText = msg.content[0].type === "text" ? msg.content[0].text : "";
     const validation = validateEmploymentContract(contractText, data.monthlySalary);
@@ -200,7 +213,7 @@ contractsRouter.post("/contracts/generate", async (req, res) => {
       });
       return;
     }
-    res.json({ contract: contractText, validationWarnings: validation.warnings });
+    res.json({ contract: contractText, validationWarnings: [...validation.warnings, ...lawWarnings] });
   } catch (err) {
     req.log.error({ err }, "Employment contract generation failed");
     res.status(500).json({ error: "فشل توليد العقد. يرجى المحاولة مرة أخرى." });
@@ -233,7 +246,7 @@ function validateGenericContract(text: string, requiredPhrases: string[]): { val
   return { valid: missing.length === 0, missing };
 }
 
-function buildRentalPrompt(d: z.infer<typeof RentalBody>): string {
+function buildRentalPrompt(d: z.infer<typeof RentalBody>, articlesText?: string): string {
   return `أنت كاتب عدل أردني متخصص في عقود الإيجار.
 صِغ عقد إيجار رسمياً استناداً إلى القانون المدني الأردني رقم (43) لسنة 1976 وتعديلاته وقانون إيجار العقارات الأردني رقم (11) لسنة 1994 وتعديلاته.
 
@@ -241,7 +254,7 @@ ${STRICT_RULES_BASE}
 6. ضمّن بنداً واضحاً لآلية الإخلاء وفترة الإشعار (شهر كحد أدنى وفق القانون).
 7. ضمّن بنداً لحالات فسخ العقد من قِبل كل طرف.
 8. ضمّن بنداً للصيانة: الكبيرة على المؤجر، الصغيرة على المستأجر.
-
+${articlesText ? `\n══════════════════════════════════════════════════════\nالنصوص القانونية المرجعية:\n══════════════════════════════════════════════════════\n${articlesText}\n══════════════════════════════════════════════════════\n` : ""}
 بيانات العقد:
 المؤجر: ${d.landlordName}
 المستأجر: ${d.tenantName}
@@ -261,11 +274,20 @@ contractsRouter.post("/contracts/generate-rental", async (req, res) => {
     return;
   }
   const data = sanitizeObject(parsed.data as unknown as Record<string, unknown>) as z.infer<typeof RentalBody>;
+  let rentalArticlesText: string | undefined;
+  const rentalLawWarnings: string[] = [];
+  try {
+    const ragResult = await retrieveArticlesForContract("rental");
+    rentalArticlesText = formatArticlesForPrompt(ragResult.articles);
+  } catch (error) {
+    req.log.warn({ error: (error as Error).message }, "Failed to retrieve rental articles from law system, using fallback");
+    rentalLawWarnings.push("تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.");
+  }
   try {
     const msg = await anthropic.messages.create({
       model: AI_MODEL,
       max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildRentalPrompt(data) }],
+      messages: [{ role: "user", content: buildRentalPrompt(data, rentalArticlesText) }],
     });
     const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
     const { valid, missing } = validateGenericContract(contract, RENTAL_REQUIRED);
@@ -273,7 +295,7 @@ contractsRouter.post("/contracts/generate-rental", async (req, res) => {
       res.status(422).json({ error: "لم يكتمل توليد العقد", missingClauses: missing });
       return;
     }
-    res.json({ contract, validationWarnings: [] });
+    res.json({ contract, validationWarnings: rentalLawWarnings });
   } catch (err) {
     req.log.error({ err }, "Rental contract generation failed");
     res.status(500).json({ error: "فشل توليد عقد الإيجار." });
@@ -300,7 +322,7 @@ const ServiceBody = z.object({
 
 const SERVICE_REQUIRED = ["العميل", "الخدمة", "الأتعاب", "التوقيع"];
 
-function buildServicePrompt(d: z.infer<typeof ServiceBody>): string {
+function buildServicePrompt(d: z.infer<typeof ServiceBody>, articlesText?: string): string {
   const revisionInfo = d.hasRevisions ? `مسموح بـ ${d.revisionCount} مراجعات` : "لا تشمل مراجعات";
   const confidentialityText = d.hasConfidentialityClause
     ? "يتضمن العقد بند سرية — يلتزم مقدم الخدمة بعدم إفشاء أسرار العميل."
@@ -313,7 +335,7 @@ ${STRICT_RULES_BASE}
 6. ضمّن بنداً صريحاً لاستقلالية مقدم الخدمة (ليس موظفاً).
 7. ضمّن بنداً لإجراءات القبول والرفض عند التسليم.
 8. ضمّن بنداً للإنهاء المبكر وتبعاته المالية.
-
+${articlesText ? `\n══════════════════════════════════════════════════════\nالنصوص القانونية المرجعية:\n══════════════════════════════════════════════════════\n${articlesText}\n══════════════════════════════════════════════════════\n` : ""}
 بيانات العقد:
 العميل: ${d.clientName}
 مقدم الخدمة: ${d.providerName}
@@ -336,11 +358,20 @@ contractsRouter.post("/contracts/generate-service", async (req, res) => {
     return;
   }
   const data = sanitizeObject(parsed.data as unknown as Record<string, unknown>) as z.infer<typeof ServiceBody>;
+  let serviceArticlesText: string | undefined;
+  const serviceLawWarnings: string[] = [];
+  try {
+    const ragResult = await retrieveArticlesForContract("service");
+    serviceArticlesText = formatArticlesForPrompt(ragResult.articles);
+  } catch (error) {
+    req.log.warn({ error: (error as Error).message }, "Failed to retrieve service articles from law system, using fallback");
+    serviceLawWarnings.push("تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.");
+  }
   try {
     const msg = await anthropic.messages.create({
       model: AI_MODEL,
       max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildServicePrompt(data) }],
+      messages: [{ role: "user", content: buildServicePrompt(data, serviceArticlesText) }],
     });
     const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
     const { valid, missing } = validateGenericContract(contract, SERVICE_REQUIRED);
@@ -348,7 +379,7 @@ contractsRouter.post("/contracts/generate-service", async (req, res) => {
       res.status(422).json({ error: "لم يكتمل توليد العقد", missingClauses: missing });
       return;
     }
-    res.json({ contract, validationWarnings: [] });
+    res.json({ contract, validationWarnings: serviceLawWarnings });
   } catch (err) {
     req.log.error({ err }, "Service contract generation failed");
     res.status(500).json({ error: "فشل توليد عقد الخدمات." });
@@ -372,7 +403,7 @@ const NdaBody = z.object({
 
 const NDA_REQUIRED = ["الطرف الأول", "الطرف الثاني", "السرية", "التوقيع"];
 
-function buildNdaPrompt(d: z.infer<typeof NdaBody>): string {
+function buildNdaPrompt(d: z.infer<typeof NdaBody>, articlesText?: string): string {
   const penaltyText = d.penaltyAmount ? `${d.penaltyAmount} دينار أردني` : "يُحدَّد وفق تقدير المحكمة";
   const permittedText = d.permittedDisclosures?.trim() || "لا توجد إفصاحات مسموحة إضافية";
 
@@ -383,7 +414,7 @@ ${STRICT_RULES_BASE}
 6. اجعل الاتفاقية أحادية الاتجاه (من الطرف الأول للثاني).
 7. ضمّن قائمة صريحة باستثناءات السرية (المعلومات العامة، ما أُفصح بموافقة مسبقة، ما طلبته جهة قانونية).
 8. ضمّن بنداً لاسترداد وإتلاف المعلومات عند انتهاء الاتفاقية.
-
+${articlesText ? `\n══════════════════════════════════════════════════════\nالنصوص القانونية المرجعية:\n══════════════════════════════════════════════════════\n${articlesText}\n══════════════════════════════════════════════════════\n` : ""}
 بيانات الاتفاقية:
 الطرف الأول (المُفصِح): ${d.partyOneName}
 الطرف الثاني (المُستقبِل): ${d.partyTwoName}
@@ -405,11 +436,20 @@ contractsRouter.post("/contracts/generate-nda", async (req, res) => {
     return;
   }
   const data = sanitizeObject(parsed.data as unknown as Record<string, unknown>) as z.infer<typeof NdaBody>;
+  let ndaArticlesText: string | undefined;
+  const ndaLawWarnings: string[] = [];
+  try {
+    const ragResult = await retrieveArticlesForContract("nda");
+    ndaArticlesText = formatArticlesForPrompt(ragResult.articles);
+  } catch (error) {
+    req.log.warn({ error: (error as Error).message }, "Failed to retrieve NDA articles from law system, using fallback");
+    ndaLawWarnings.push("تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.");
+  }
   try {
     const msg = await anthropic.messages.create({
       model: AI_MODEL,
       max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildNdaPrompt(data) }],
+      messages: [{ role: "user", content: buildNdaPrompt(data, ndaArticlesText) }],
     });
     const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
     const { valid, missing } = validateGenericContract(contract, NDA_REQUIRED);
@@ -417,7 +457,7 @@ contractsRouter.post("/contracts/generate-nda", async (req, res) => {
       res.status(422).json({ error: "لم يكتمل توليد الاتفاقية", missingClauses: missing });
       return;
     }
-    res.json({ contract, validationWarnings: [] });
+    res.json({ contract, validationWarnings: ndaLawWarnings });
   } catch (err) {
     req.log.error({ err }, "NDA generation failed");
     res.status(500).json({ error: "فشل توليد اتفاقية السرية." });
@@ -444,7 +484,7 @@ const SupplierBody = z.object({
 
 const SUPPLIER_REQUIRED = ["المشتري", "المورد", "التوريد", "التوقيع"];
 
-function buildSupplierPrompt(d: z.infer<typeof SupplierBody>): string {
+function buildSupplierPrompt(d: z.infer<typeof SupplierBody>, articlesText?: string): string {
   const penaltyText = d.penaltyForDelay
     ? `${d.penaltyForDelay}% من قيمة العقد يومياً`
     : "لا توجد غرامة تأخير محددة";
@@ -459,7 +499,7 @@ ${STRICT_RULES_BASE}
 6. ضمّن بنداً صريحاً لآلية الفحص والاستلام وحق الرفض.
 7. ضمّن بنداً لانتقال المخاطر والملكية (عند التسليم في المكان المتفق).
 8. ضمّن بنداً للقوة القاهرة وتعريفها.
-
+${articlesText ? `\n══════════════════════════════════════════════════════\nالنصوص القانونية المرجعية:\n══════════════════════════════════════════════════════\n${articlesText}\n══════════════════════════════════════════════════════\n` : ""}
 بيانات العقد:
 المشتري: ${d.buyerName}
 المورد: ${d.supplierName}
@@ -483,11 +523,20 @@ contractsRouter.post("/contracts/generate-supplier", async (req, res) => {
     return;
   }
   const data = sanitizeObject(parsed.data as unknown as Record<string, unknown>) as z.infer<typeof SupplierBody>;
+  let supplierArticlesText: string | undefined;
+  const supplierLawWarnings: string[] = [];
+  try {
+    const ragResult = await retrieveArticlesForContract("supplier");
+    supplierArticlesText = formatArticlesForPrompt(ragResult.articles);
+  } catch (error) {
+    req.log.warn({ error: (error as Error).message }, "Failed to retrieve supplier articles from law system, using fallback");
+    supplierLawWarnings.push("تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.");
+  }
   try {
     const msg = await anthropic.messages.create({
       model: AI_MODEL,
       max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildSupplierPrompt(data) }],
+      messages: [{ role: "user", content: buildSupplierPrompt(data, supplierArticlesText) }],
     });
     const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
     const { valid, missing } = validateGenericContract(contract, SUPPLIER_REQUIRED);
@@ -495,7 +544,7 @@ contractsRouter.post("/contracts/generate-supplier", async (req, res) => {
       res.status(422).json({ error: "لم يكتمل توليد العقد", missingClauses: missing });
       return;
     }
-    res.json({ contract, validationWarnings: [] });
+    res.json({ contract, validationWarnings: supplierLawWarnings });
   } catch (err) {
     req.log.error({ err }, "Supplier contract generation failed");
     res.status(500).json({ error: "فشل توليد عقد التوريد." });
