@@ -241,29 +241,29 @@ export default function Home() {
   const selectTriggerCls = "h-11 bg-background/50 focus:bg-background border-border/60 text-sm";
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col items-center p-4 md:p-10 font-sans relative overflow-hidden">
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center p-3 sm:p-4 md:p-10 font-sans relative overflow-hidden">
       <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none -z-10" />
 
-      <header className="w-full max-w-6xl mb-10 flex items-center justify-between z-10">
-        <div className="flex items-center gap-4">
-          <div className="bg-gradient-to-br from-primary/20 to-primary/5 p-3.5 rounded-xl border border-primary/20 shadow-[0_0_20px_rgba(212,175,55,0.15)]">
-            <Scale className="w-9 h-9 text-primary" />
+      <header className="w-full max-w-6xl mb-6 md:mb-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 z-10">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <div className="bg-gradient-to-br from-primary/20 to-primary/5 p-2.5 sm:p-3.5 rounded-xl border border-primary/20 shadow-[0_0_20px_rgba(212,175,55,0.15)] shrink-0">
+            <Scale className="w-7 h-7 sm:w-9 sm:h-9 text-primary" />
           </div>
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-white mb-0.5">قانوني AI</h1>
-            <p className="text-primary/80 font-medium text-sm">منصة توليد العقود القانونية - الأردن</p>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-white mb-0.5">قانوني AI</h1>
+            <p className="text-primary/80 font-medium text-xs sm:text-sm truncate">منصة توليد العقود القانونية - الأردن</p>
           </div>
         </div>
         <a
           href="/review"
-          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors border border-border/50 hover:border-primary/40 rounded-lg px-4 py-2"
+          className="flex items-center gap-2 text-xs sm:text-sm font-medium text-muted-foreground hover:text-primary transition-colors border border-border/50 hover:border-primary/40 rounded-lg px-3 sm:px-4 py-2 self-stretch sm:self-auto justify-center shrink-0"
         >
           <FileText className="w-4 h-4" />
           مراجع العقود
         </a>
       </header>
 
-      <main className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 z-10">
+      <main className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-8 z-10">
         {/* ─── FORM PANEL ─── */}
         <div className="lg:col-span-5">
           <Card className="border-border/50 bg-card/60 backdrop-blur-xl shadow-2xl overflow-hidden rounded-2xl">
@@ -605,13 +605,13 @@ export default function Home() {
         {/* ─── CONTRACT PREVIEW ─── */}
         <div className="lg:col-span-7">
           <Card className="h-full border-border/50 bg-card/40 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden min-h-[600px] rounded-2xl relative">
-            <CardHeader className="border-b border-border/50 bg-secondary/30 flex flex-row items-center justify-between py-4 shrink-0">
-              <CardTitle className="flex items-center gap-2.5 text-lg font-bold text-white">
-                <FileText className="w-5 h-5 text-primary" />
+            <CardHeader className="border-b border-border/50 bg-secondary/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-4 shrink-0">
+              <CardTitle className="flex items-center gap-2.5 text-base sm:text-lg font-bold text-white">
+                <FileText className="w-5 h-5 text-primary shrink-0" />
                 {CONTRACT_TYPE_LABEL[contractType]}
               </CardTitle>
               {generatedContract && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Button variant="outline" size="sm" onClick={handleCopy} className="h-9 px-3 border-border/60 hover:bg-white/5 text-xs">
                     {copied ? <Check className="w-3.5 h-3.5 ml-1.5 text-green-500" /> : <Copy className="w-3.5 h-3.5 ml-1.5 text-gray-300" />}
                     {copied ? "تم" : "نسخ"}
@@ -671,11 +671,11 @@ export default function Home() {
               )}
 
               {generatedContract ? (
-                <div className="p-8 md:p-10 h-full overflow-y-auto whitespace-pre-wrap leading-loose text-sm md:text-base font-serif text-gray-200">
+                <div className="p-4 sm:p-6 md:p-10 h-full overflow-y-auto whitespace-pre-wrap leading-loose text-sm md:text-base font-serif text-gray-200 break-words">
                   {generatedContract}
                 </div>
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-8 text-center opacity-70">
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-6 sm:p-8 text-center opacity-70">
                   <div className="bg-secondary/40 p-5 rounded-full mb-5 border border-border/50 shadow-inner">
                     <FileText className="w-14 h-14 text-muted-foreground/60" />
                   </div>

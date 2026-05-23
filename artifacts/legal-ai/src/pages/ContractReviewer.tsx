@@ -189,26 +189,26 @@ export default function ContractReviewer() {
     : null;
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col items-center p-4 md:p-10 relative overflow-hidden">
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center p-3 sm:p-4 md:p-10 relative overflow-hidden">
       <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none -z-10" />
 
-      <header className="w-full max-w-5xl mb-8 flex items-center justify-between z-10">
-        <div className="flex items-center gap-4">
-          <div className="bg-gradient-to-br from-primary/20 to-primary/5 p-3.5 rounded-xl border border-primary/20">
-            <Scale className="w-8 h-8 text-primary" />
+      <header className="w-full max-w-5xl mb-6 md:mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 z-10">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <div className="bg-gradient-to-br from-primary/20 to-primary/5 p-2.5 sm:p-3.5 rounded-xl border border-primary/20 shrink-0">
+            <Scale className="w-7 h-7 sm:w-8 sm:h-8 text-primary" />
           </div>
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-white">مراجع العقود</h1>
-            <p className="text-primary/80 text-sm">ارفع أي عقد أردني — احصل على تقرير مخاطر فوري</p>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white">مراجع العقود</h1>
+            <p className="text-primary/80 text-xs sm:text-sm truncate">ارفع أي عقد أردني — احصل على تقرير مخاطر فوري</p>
           </div>
         </div>
-        <a href="/" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors border border-border/50 hover:border-primary/40 rounded-lg px-4 py-2">
+        <a href="/" className="flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-muted-foreground hover:text-primary transition-colors border border-border/50 hover:border-primary/40 rounded-lg px-3 sm:px-4 py-2 self-stretch sm:self-auto shrink-0">
           <FileText className="w-4 h-4" />
           توليد عقد جديد
         </a>
       </header>
 
-      <main className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 z-10">
+      <main className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-8 z-10">
         {/* Upload Panel */}
         <div className="lg:col-span-5">
           <Card className="border-border/50 bg-card/60 backdrop-blur-xl shadow-2xl rounded-2xl">
