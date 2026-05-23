@@ -31,6 +31,11 @@ type FormCallbacks = {
   onLoadingChange: (loading: boolean) => void;
 };
 
+type StreamEvent =
+  | { type: "chunk"; text: string }
+  | { type: "done"; valid: boolean; contract?: string; error?: string; missingClauses?: string[]; validationWarnings?: string[] }
+  | { type: "error"; error: string };
+
 async function submitContract(
   url: string,
   payload: unknown,
@@ -46,8 +51,12 @@ async function submitContract(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const data: { contract?: string; error?: string; missingClauses?: string[] } = await res.json();
-    if (!res.ok) {
+
+    const contentType = res.headers.get("content-type") ?? "";
+    const isNdjson = contentType.includes("ndjson");
+
+    if (!isNdjson) {
+      const data: { error?: string; missingClauses?: string[] } = await res.json().catch(() => ({}));
       const is422 = res.status === 422;
       toast({
         title: is422 ? "العقد غير مكتمل" : "حدث خطأ",
@@ -59,7 +68,80 @@ async function submitContract(
       });
       return;
     }
-    callbacks.onResult(data.contract ?? "", partyName);
+
+    if (!res.body) {
+      toast({ title: "خطأ في الاتصال", description: "لم يصل أي رد من الخادم.", variant: "destructive" });
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let streamedText = "";
+    let finalContract = "";
+    let finalEvent: StreamEvent | null = null;
+
+    const handleLine = (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      let event: StreamEvent;
+      try {
+        event = JSON.parse(trimmed) as StreamEvent;
+      } catch {
+        return;
+      }
+      if (event.type === "chunk") {
+        streamedText += event.text;
+        callbacks.onResult(streamedText, partyName);
+      } else {
+        finalEvent = event;
+        if (event.type === "done" && event.valid && event.contract) {
+          finalContract = event.contract;
+        }
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) handleLine(line);
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) handleLine(buffer);
+
+    if (finalEvent === null) {
+      toast({
+        title: "انقطع الاتصال",
+        description: "تم قطع الاتصال قبل اكتمال توليد العقد. الرجاء المحاولة مرة أخرى.",
+        variant: "destructive",
+      });
+      callbacks.onResult("", partyName);
+      return;
+    }
+
+    const finalEventTyped = finalEvent as StreamEvent;
+    if (finalEventTyped.type === "error") {
+      toast({ title: "حدث خطأ", description: finalEventTyped.error, variant: "destructive" });
+      callbacks.onResult("", partyName);
+      return;
+    }
+
+    if (finalEventTyped.type === "done" && !finalEventTyped.valid) {
+      toast({
+        title: "العقد غير مكتمل",
+        description: finalEventTyped.missingClauses?.length
+          ? `البنود المفقودة: ${finalEventTyped.missingClauses.join("، ")}`
+          : finalEventTyped.error ?? "لم يكتمل توليد العقد.",
+        variant: "destructive",
+      });
+      callbacks.onResult("", partyName);
+      return;
+    }
+
+    callbacks.onResult(finalContract || streamedText, partyName);
     toast({ title: successTitle, description: "يمكنك الآن مراجعة العقد ونسخه أو تحميله." });
   } catch {
     toast({

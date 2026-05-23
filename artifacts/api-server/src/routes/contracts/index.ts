@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import * as z from "zod";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { GenerateContractBody } from "@workspace/api-zod";
@@ -14,6 +14,68 @@ const contractsRouter = Router();
 const MIN_WAGE_JD = 290;
 const AI_MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 8192;
+
+type ValidationResult = { valid: boolean; missingClauses: string[]; warnings: string[] };
+
+async function streamContractGeneration(
+  req: Request,
+  res: Response,
+  opts: {
+    prompt: string;
+    validate: (text: string) => ValidationResult;
+    lawWarnings: string[];
+    errorLabel: string;
+    incompleteError: string;
+    failureError: string;
+  },
+): Promise<void> {
+  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const write = (obj: unknown) => {
+    res.write(JSON.stringify(obj) + "\n");
+  };
+
+  let fullText = "";
+  try {
+    const stream = anthropic.messages.stream({
+      model: AI_MODEL,
+      max_tokens: MAX_TOKENS,
+      messages: [{ role: "user", content: opts.prompt }],
+    });
+    for await (const event of stream) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        const text = event.delta.text;
+        fullText += text;
+        write({ type: "chunk", text });
+      }
+    }
+    const result = opts.validate(fullText);
+    if (!result.valid) {
+      write({
+        type: "done",
+        valid: false,
+        error: opts.incompleteError,
+        missingClauses: result.missingClauses,
+        validationWarnings: [...result.warnings, ...opts.lawWarnings],
+      });
+    } else {
+      write({
+        type: "done",
+        valid: true,
+        contract: fullText,
+        validationWarnings: [...result.warnings, ...opts.lawWarnings],
+      });
+    }
+    res.end();
+  } catch (err) {
+    req.log.error({ err }, opts.errorLabel);
+    write({ type: "error", error: opts.failureError });
+    res.end();
+  }
+}
 
 /* ══════════════════════════════════════════════════════════
    SHARED UTILITIES
@@ -198,26 +260,14 @@ contractsRouter.post("/contracts/generate", async (req, res) => {
     req.log.warn({ error: (error as Error).message }, "Failed to retrieve articles from law system, using fallback");
     lawWarnings.push("تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.");
   }
-  try {
-    const msg = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildEmploymentPrompt(data, articlesText) }],
-    });
-    const contractText = msg.content[0].type === "text" ? msg.content[0].text : "";
-    const validation = validateEmploymentContract(contractText, data.monthlySalary);
-    if (!validation.valid) {
-      res.status(422).json({
-        error: "لم يستوفِ العقد المتطلبات القانونية",
-        missingClauses: validation.missingClauses,
-      });
-      return;
-    }
-    res.json({ contract: contractText, validationWarnings: [...validation.warnings, ...lawWarnings] });
-  } catch (err) {
-    req.log.error({ err }, "Employment contract generation failed");
-    res.status(500).json({ error: "فشل توليد العقد. يرجى المحاولة مرة أخرى." });
-  }
+  await streamContractGeneration(req, res, {
+    prompt: buildEmploymentPrompt(data, articlesText),
+    validate: (text) => validateEmploymentContract(text, data.monthlySalary),
+    lawWarnings,
+    errorLabel: "Employment contract generation failed",
+    incompleteError: "لم يستوفِ العقد المتطلبات القانونية",
+    failureError: "فشل توليد العقد. يرجى المحاولة مرة أخرى.",
+  });
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -283,23 +333,17 @@ contractsRouter.post("/contracts/generate-rental", async (req, res) => {
     req.log.warn({ error: (error as Error).message }, "Failed to retrieve rental articles from law system, using fallback");
     rentalLawWarnings.push("تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.");
   }
-  try {
-    const msg = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildRentalPrompt(data, rentalArticlesText) }],
-    });
-    const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
-    const { valid, missing } = validateGenericContract(contract, RENTAL_REQUIRED);
-    if (!valid) {
-      res.status(422).json({ error: "لم يكتمل توليد العقد", missingClauses: missing });
-      return;
-    }
-    res.json({ contract, validationWarnings: rentalLawWarnings });
-  } catch (err) {
-    req.log.error({ err }, "Rental contract generation failed");
-    res.status(500).json({ error: "فشل توليد عقد الإيجار." });
-  }
+  await streamContractGeneration(req, res, {
+    prompt: buildRentalPrompt(data, rentalArticlesText),
+    validate: (text) => {
+      const { valid, missing } = validateGenericContract(text, RENTAL_REQUIRED);
+      return { valid, missingClauses: missing, warnings: [] };
+    },
+    lawWarnings: rentalLawWarnings,
+    errorLabel: "Rental contract generation failed",
+    incompleteError: "لم يكتمل توليد العقد",
+    failureError: "فشل توليد عقد الإيجار.",
+  });
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -367,23 +411,17 @@ contractsRouter.post("/contracts/generate-service", async (req, res) => {
     req.log.warn({ error: (error as Error).message }, "Failed to retrieve service articles from law system, using fallback");
     serviceLawWarnings.push("تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.");
   }
-  try {
-    const msg = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildServicePrompt(data, serviceArticlesText) }],
-    });
-    const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
-    const { valid, missing } = validateGenericContract(contract, SERVICE_REQUIRED);
-    if (!valid) {
-      res.status(422).json({ error: "لم يكتمل توليد العقد", missingClauses: missing });
-      return;
-    }
-    res.json({ contract, validationWarnings: serviceLawWarnings });
-  } catch (err) {
-    req.log.error({ err }, "Service contract generation failed");
-    res.status(500).json({ error: "فشل توليد عقد الخدمات." });
-  }
+  await streamContractGeneration(req, res, {
+    prompt: buildServicePrompt(data, serviceArticlesText),
+    validate: (text) => {
+      const { valid, missing } = validateGenericContract(text, SERVICE_REQUIRED);
+      return { valid, missingClauses: missing, warnings: [] };
+    },
+    lawWarnings: serviceLawWarnings,
+    errorLabel: "Service contract generation failed",
+    incompleteError: "لم يكتمل توليد العقد",
+    failureError: "فشل توليد عقد الخدمات.",
+  });
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -445,23 +483,17 @@ contractsRouter.post("/contracts/generate-nda", async (req, res) => {
     req.log.warn({ error: (error as Error).message }, "Failed to retrieve NDA articles from law system, using fallback");
     ndaLawWarnings.push("تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.");
   }
-  try {
-    const msg = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildNdaPrompt(data, ndaArticlesText) }],
-    });
-    const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
-    const { valid, missing } = validateGenericContract(contract, NDA_REQUIRED);
-    if (!valid) {
-      res.status(422).json({ error: "لم يكتمل توليد الاتفاقية", missingClauses: missing });
-      return;
-    }
-    res.json({ contract, validationWarnings: ndaLawWarnings });
-  } catch (err) {
-    req.log.error({ err }, "NDA generation failed");
-    res.status(500).json({ error: "فشل توليد اتفاقية السرية." });
-  }
+  await streamContractGeneration(req, res, {
+    prompt: buildNdaPrompt(data, ndaArticlesText),
+    validate: (text) => {
+      const { valid, missing } = validateGenericContract(text, NDA_REQUIRED);
+      return { valid, missingClauses: missing, warnings: [] };
+    },
+    lawWarnings: ndaLawWarnings,
+    errorLabel: "NDA generation failed",
+    incompleteError: "لم يكتمل توليد الاتفاقية",
+    failureError: "فشل توليد اتفاقية السرية.",
+  });
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -532,23 +564,17 @@ contractsRouter.post("/contracts/generate-supplier", async (req, res) => {
     req.log.warn({ error: (error as Error).message }, "Failed to retrieve supplier articles from law system, using fallback");
     supplierLawWarnings.push("تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.");
   }
-  try {
-    const msg = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildSupplierPrompt(data, supplierArticlesText) }],
-    });
-    const contract = msg.content[0].type === "text" ? msg.content[0].text : "";
-    const { valid, missing } = validateGenericContract(contract, SUPPLIER_REQUIRED);
-    if (!valid) {
-      res.status(422).json({ error: "لم يكتمل توليد العقد", missingClauses: missing });
-      return;
-    }
-    res.json({ contract, validationWarnings: supplierLawWarnings });
-  } catch (err) {
-    req.log.error({ err }, "Supplier contract generation failed");
-    res.status(500).json({ error: "فشل توليد عقد التوريد." });
-  }
+  await streamContractGeneration(req, res, {
+    prompt: buildSupplierPrompt(data, supplierArticlesText),
+    validate: (text) => {
+      const { valid, missing } = validateGenericContract(text, SUPPLIER_REQUIRED);
+      return { valid, missingClauses: missing, warnings: [] };
+    },
+    lawWarnings: supplierLawWarnings,
+    errorLabel: "Supplier contract generation failed",
+    incompleteError: "لم يكتمل توليد العقد",
+    failureError: "فشل توليد عقد التوريد.",
+  });
 });
 
 /* ══════════════════════════════════════════════════════════
