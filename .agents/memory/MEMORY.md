@@ -1,0 +1,3 @@
+- [api-server dev has no watch](api-server-no-watch.md) — `dev` is `build && start`; code edits need a workflow restart or you verify against a stale build.
+- [Streaming verification from bash](streaming-verification.md) — the bash tool kills backgrounded jobs on return; run long (~40s+) stream tests synchronously in one foreground call.
+- [Hybrid contract pipeline](hybrid-contract-pipeline.md) — fixed statutory clauses are deterministic verbatim; only variable sections are LLM-drafted; NDJSON envelope is a hard contract with the frontend.

@@ -88,6 +88,20 @@ export function parseSections(raw: string): Record<string, string> {
 const REVIEW_PLACEHOLDER = "[يُرجى مراجعة محامٍ أردني مرخص لصياغة هذا البند]";
 
 /**
+ * Required variable clauses whose drafted text the model failed to produce
+ * (missing or empty). These render as a placeholder in the assembly, so they
+ * must fail validation rather than ship a hollow contract.
+ */
+export function missingRequiredSections<T>(
+  template: ContractTemplate<T>,
+  sections: Record<string, string>,
+): string[] {
+  return getVariableClauses(template)
+    .filter((c) => c.required && !(sections[c.id]?.trim()))
+    .map((c) => c.heading);
+}
+
+/**
  * Assemble the final contract in clause order: fixed clauses verbatim,
  * variable clauses filled with the model's drafted text (or a review
  * placeholder when missing).
@@ -146,17 +160,27 @@ export async function streamHybridContract<T>(
   res.flushHeaders();
 
   const write = (obj: unknown) => {
+    if (res.writableEnded) return;
     res.write(JSON.stringify(obj) + "\n");
   };
 
+  const prompt = buildHybridPrompt(opts.template, opts.data, opts.articlesText);
+  const stream = anthropic.messages.stream({
+    model: AI_MODEL,
+    max_tokens: MAX_TOKENS,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  // If the client disconnects, stop generating and stop writing.
+  let aborted = false;
+  const onClose = () => {
+    aborted = true;
+    stream.abort();
+  };
+  res.on("close", onClose);
+
   try {
-    const prompt = buildHybridPrompt(opts.template, opts.data, opts.articlesText);
     let raw = "";
-    const stream = anthropic.messages.stream({
-      model: AI_MODEL,
-      max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: prompt }],
-    });
     for await (const event of stream) {
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
         const text = event.delta.text;
@@ -167,16 +191,24 @@ export async function streamHybridContract<T>(
       }
     }
 
+    if (aborted) return;
+
     const sections = parseSections(raw);
     const assembled = assembleContract(opts.template, opts.data, sections);
     const result = opts.validate(assembled);
 
-    if (!result.valid) {
+    // A required variable clause the model failed to draft renders as a
+    // placeholder — never let such a hollow contract pass as valid.
+    const missingRequired = missingRequiredSections(opts.template, sections);
+    const valid = result.valid && missingRequired.length === 0;
+    const missingClauses = [...result.missingClauses, ...missingRequired];
+
+    if (!valid) {
       write({
         type: "done",
         valid: false,
         error: opts.incompleteError,
-        missingClauses: result.missingClauses,
+        missingClauses,
         validationWarnings: [...result.warnings, ...opts.lawWarnings],
       });
     } else {
@@ -189,8 +221,11 @@ export async function streamHybridContract<T>(
     }
     res.end();
   } catch (err) {
+    if (aborted) return;
     req.log.error({ err }, opts.errorLabel);
     write({ type: "error", error: opts.failureError });
     res.end();
+  } finally {
+    res.off("close", onClose);
   }
 }
