@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useGenerateContract } from "@workspace/api-client-react";
 import {
   Copy, Check, FileText, Scale, FileDown,
   AlertTriangle, ChevronDown, ChevronUp, MessageCircle,
@@ -22,7 +21,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { RentalForm, ServiceForm, NdaForm, SupplierForm } from "@/components/ContractForms";
+import { RentalForm, ServiceForm, NdaForm, SupplierForm, submitContract } from "@/components/ContractForms";
 
 const MIN_WAGE = 290;
 
@@ -130,40 +129,42 @@ export default function Home() {
   const salary = form.watch("monthlySalary");
   const belowMinWage = salary > 0 && salary < MIN_WAGE;
 
-  const { mutate, isPending: employmentLoading } = useGenerateContract({
-    mutation: {
-      onSuccess: (result) => {
-        setGeneratedContract(result.contract);
-        setValidationWarnings(result.validationWarnings ?? []);
-        setCurrentPartyName(form.getValues().employeeName || "موظف");
-        toast({
-          title: "تم توليد العقد بنجاح",
-          description:
-            result.validationWarnings?.length
-              ? `تم التوليد مع ملاحظات: ${result.validationWarnings.join("، ")}`
-              : "يمكنك الآن مراجعة العقد ونسخه أو تحميله.",
-        });
-      },
-      onError: (error: unknown) => {
-        const err = error as { response?: { status?: number; data?: { missingClauses?: string[] } } };
-        const is422 = err?.response?.status === 422;
-        const missing = err?.response?.data?.missingClauses;
-        toast({
-          title: is422 ? "العقد غير مكتمل قانونياً" : "حدث خطأ",
-          description:
-            is422 && missing
-              ? `البنود المفقودة: ${missing.join("، ")}`
-              : "تعذر توليد العقد. الرجاء المحاولة مرة أخرى.",
-          variant: "destructive",
-        });
-      },
-    },
-  });
+  const [employmentLoading, setEmploymentLoading] = useState(false);
 
   const isPending = employmentLoading || nonEmploymentLoading;
 
-  function onSubmit(values: FormValues) {
-    mutate({ data: values });
+  function handleNonEmploymentResult(c: string, name: string, warnings?: string[]) {
+    if (c) {
+      setGeneratedContract(c);
+      setCurrentPartyName(name);
+      setValidationWarnings(warnings ?? []);
+    } else {
+      setGeneratedContract(null);
+      setValidationWarnings([]);
+    }
+  }
+
+  async function onSubmit(values: FormValues) {
+    await submitContract(
+      "/api/contracts/generate",
+      values,
+      {
+        onResult: (c, name, warnings) => {
+          if (c) {
+            setGeneratedContract(c);
+            setCurrentPartyName(name);
+            setValidationWarnings(warnings ?? []);
+          } else {
+            setGeneratedContract(null);
+            setValidationWarnings([]);
+          }
+        },
+        onLoadingChange: setEmploymentLoading,
+      },
+      "تم توليد العقد بنجاح",
+      toast,
+      values.employeeName || "موظف",
+    );
   }
 
   const handleCopy = () => {
@@ -576,25 +577,25 @@ export default function Home() {
               {/* ══ NON-EMPLOYMENT FORMS ══ */}
               {contractType === "rental" && (
                 <RentalForm
-                  onResult={(c, name) => { setGeneratedContract(c); setCurrentPartyName(name); setValidationWarnings([]); toast({ title: "تم توليد عقد الإيجار" }); }}
+                  onResult={handleNonEmploymentResult}
                   onLoadingChange={setNonEmploymentLoading}
                 />
               )}
               {contractType === "service" && (
                 <ServiceForm
-                  onResult={(c, name) => { setGeneratedContract(c); setCurrentPartyName(name); setValidationWarnings([]); toast({ title: "تم توليد عقد الخدمات" }); }}
+                  onResult={handleNonEmploymentResult}
                   onLoadingChange={setNonEmploymentLoading}
                 />
               )}
               {contractType === "nda" && (
                 <NdaForm
-                  onResult={(c, name) => { setGeneratedContract(c); setCurrentPartyName(name); setValidationWarnings([]); toast({ title: "تم توليد اتفاقية السرية" }); }}
+                  onResult={handleNonEmploymentResult}
                   onLoadingChange={setNonEmploymentLoading}
                 />
               )}
               {contractType === "supplier" && (
                 <SupplierForm
-                  onResult={(c, name) => { setGeneratedContract(c); setCurrentPartyName(name); setValidationWarnings([]); toast({ title: "تم توليد عقد التوريد" }); }}
+                  onResult={handleNonEmploymentResult}
                   onLoadingChange={setNonEmploymentLoading}
                 />
               )}

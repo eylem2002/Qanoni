@@ -27,7 +27,7 @@ function FieldLabel({ label, required }: { label: string; required?: boolean }) 
 }
 
 type FormCallbacks = {
-  onResult: (contract: string, partyName: string) => void;
+  onResult: (contract: string, partyName: string, validationWarnings?: string[]) => void;
   onLoadingChange: (loading: boolean) => void;
 };
 
@@ -36,7 +36,7 @@ type StreamEvent =
   | { type: "done"; valid: boolean; contract?: string; error?: string; missingClauses?: string[]; validationWarnings?: string[] }
   | { type: "error"; error: string };
 
-async function submitContract(
+export async function submitContract(
   url: string,
   payload: unknown,
   callbacks: FormCallbacks,
@@ -141,7 +141,11 @@ async function submitContract(
       return;
     }
 
-    callbacks.onResult(finalContract || streamedText, partyName);
+    callbacks.onResult(
+      finalContract || streamedText,
+      partyName,
+      finalEventTyped.type === "done" ? finalEventTyped.validationWarnings ?? [] : [],
+    );
     toast({ title: successTitle, description: "يمكنك الآن مراجعة العقد ونسخه أو تحميله." });
   } catch {
     toast({
