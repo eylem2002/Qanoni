@@ -1,6 +1,11 @@
 import type { RequestHandler } from "express";
-import { AppError } from "../../core/errors";
+import { AppError, NotFoundError } from "../../core/errors";
 import { extractText, analyzeContract } from "./logic/ReviewLogic";
+import {
+  persistReview,
+  getReviewsForUser,
+  getReviewForUser,
+} from "./logic/ReviewStore";
 
 export const reviewUpload: RequestHandler = async (req, res) => {
   if (!req.file) {
@@ -27,7 +32,13 @@ export const reviewUpload: RequestHandler = async (req, res) => {
 
   try {
     const findings = await analyzeContract(contractText, req.log);
+    const reviewId = await persistReview({
+      userId: req.session.userId!,
+      findings,
+      filename: req.file.originalname,
+    });
     res.json({
+      reviewId,
       findings,
       charCount: contractText.length,
       filename: req.file.originalname,
@@ -56,7 +67,13 @@ export const reviewText: RequestHandler = async (req, res) => {
 
   try {
     const findings = await analyzeContract(contractText, req.log);
+    const reviewId = await persistReview({
+      userId: req.session.userId!,
+      findings,
+      filename: "عقد مولَّد",
+    });
     res.json({
+      reviewId,
       findings,
       charCount: contractText.length,
       filename: "عقد مولَّد",
@@ -69,4 +86,20 @@ export const reviewText: RequestHandler = async (req, res) => {
     req.log.error({ err }, "Contract review-text failed");
     res.status(500).json({ error: "فشل في مراجعة العقد." });
   }
+};
+
+/** Lists the authenticated user's saved reviews (metadata only). */
+export const listReviews: RequestHandler = async (req, res) => {
+  const reviews = await getReviewsForUser(req.session.userId!);
+  res.json({ reviews });
+};
+
+/** Retrieves one saved review owned by the authenticated user. */
+export const getReview: RequestHandler = async (req, res, next) => {
+  const review = await getReviewForUser(req.session.userId!, req.params.id as string);
+  if (!review) {
+    next(new NotFoundError("المراجعة غير موجودة"));
+    return;
+  }
+  res.json({ review });
 };

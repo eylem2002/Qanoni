@@ -9,6 +9,7 @@
 import {
   retrieveArticlesForContract,
   formatArticlesForPrompt,
+  type RagArticle,
 } from "./lawClient";
 
 export {
@@ -27,13 +28,18 @@ export async function loadArticles(
   contractType: string,
   log: LawLogger,
   fallbackText = "النصوص القانونية المرجعية غير متاحة حالياً.",
-): Promise<{ articlesText: string; lawWarnings: string[] }> {
+): Promise<{
+  articlesText: string;
+  lawWarnings: string[];
+  articles: RagArticle[];
+}> {
   const lawWarnings: string[] = [];
   try {
     const ragResult = await retrieveArticlesForContract(contractType);
     return {
       articlesText: formatArticlesForPrompt(ragResult.articles),
       lawWarnings,
+      articles: ragResult.articles,
     };
   } catch (error) {
     log.warn(
@@ -43,6 +49,6 @@ export async function loadArticles(
     lawWarnings.push(
       "تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.",
     );
-    return { articlesText: fallbackText, lawWarnings };
+    return { articlesText: fallbackText, lawWarnings, articles: [] };
   }
 }

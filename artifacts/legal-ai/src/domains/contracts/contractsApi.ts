@@ -19,6 +19,7 @@ export async function submitContract(
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(payload),
     });
 
@@ -137,6 +138,7 @@ export async function exportContractWord(body: {
   const res = await fetch("/api/contracts/export-word", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error("export-word failed");

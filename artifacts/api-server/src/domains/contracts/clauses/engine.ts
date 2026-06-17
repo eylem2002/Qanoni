@@ -152,6 +152,11 @@ export async function streamHybridContract<T>(
     errorLabel: string;
     incompleteError: string;
     failureError: string;
+    onComplete?: (info: {
+      valid: boolean;
+      contract?: string;
+      missingClauses: string[];
+    }) => Promise<void> | void;
   },
 ): Promise<void> {
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
@@ -219,6 +224,17 @@ export async function streamHybridContract<T>(
         validationWarnings: [...result.warnings, ...opts.lawWarnings],
       });
     }
+
+    // Persistence runs after the done event is written so a storage failure
+    // can never corrupt or block the stream the client already received.
+    if (opts.onComplete) {
+      try {
+        await opts.onComplete({ valid, contract: assembled, missingClauses });
+      } catch (persistErr) {
+        req.log.error({ err: persistErr }, "Failed to persist contract");
+      }
+    }
+
     res.end();
   } catch (err) {
     if (aborted) return;

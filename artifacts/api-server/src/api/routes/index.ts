@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health.routes";
+import authRouter from "../../domains/auth/routes";
 import contractsRouter from "../../domains/contracts/routes";
 import reviewRouter from "../../domains/review/routes";
 
@@ -7,6 +8,7 @@ import reviewRouter from "../../domains/review/routes";
 const apiRouter: IRouter = Router();
 
 apiRouter.use(healthRouter);
+apiRouter.use(authRouter);
 apiRouter.use(contractsRouter);
 apiRouter.use(reviewRouter);
 

@@ -13,6 +13,7 @@ import { ServiceForm } from "@/domains/contracts/forms/ServiceForm";
 import { NdaForm } from "@/domains/contracts/forms/NdaForm";
 import { SupplierForm } from "@/domains/contracts/forms/SupplierForm";
 import { PageShell } from "@/components/layout/PageShell";
+import { LogoutButton } from "@/app/auth/LogoutButton";
 import { ContractPreview } from "./ContractPreview";
 
 function ActiveForm() {
@@ -38,28 +39,31 @@ export function HomePortal() {
   const contractType = useAppSelector((s) => s.contract.contractType);
 
   const headerActions = (
-    <Box
-      component={Link}
-      to="/review"
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 1,
-        fontSize: 14,
-        fontWeight: 500,
-        color: "text.secondary",
-        textDecoration: "none",
-        border: "1px solid",
-        borderColor: "divider",
-        borderRadius: 2,
-        px: 2,
-        py: 1,
-        transition: "all .2s",
-        "&:hover": { color: "primary.main", borderColor: "primary.main" },
-      }}
-    >
-      <FileText className="w-4 h-4" />
-      مراجع العقود
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+      <Box
+        component={Link}
+        to="/review"
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          fontSize: 14,
+          fontWeight: 500,
+          color: "text.secondary",
+          textDecoration: "none",
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 2,
+          px: 2,
+          py: 1,
+          transition: "all .2s",
+          "&:hover": { color: "primary.main", borderColor: "primary.main" },
+        }}
+      >
+        <FileText className="w-4 h-4" />
+        مراجع العقود
+      </Box>
+      <LogoutButton />
     </Box>
   );
 

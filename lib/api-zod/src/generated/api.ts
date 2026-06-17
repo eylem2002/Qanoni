@@ -8,6 +8,100 @@
 import * as zod from "zod";
 
 /**
+ * @summary Create an account and start a session
+ */
+export const SignupBody = zod.object({
+  email: zod.string(),
+  password: zod.string(),
+  firmName: zod.string().optional(),
+});
+
+/**
+ * @summary Authenticate and start a session
+ */
+export const LoginBody = zod.object({
+  email: zod.string(),
+  password: zod.string(),
+});
+
+export const LoginResponse = zod.object({
+  user: zod.object({
+    id: zod.string(),
+    email: zod.string(),
+    firmName: zod.string().nullish(),
+  }),
+});
+
+/**
+ * @summary Return the authenticated user
+ */
+export const GetCurrentUserResponse = zod.object({
+  user: zod.object({
+    id: zod.string(),
+    email: zod.string(),
+    firmName: zod.string().nullish(),
+  }),
+});
+
+/**
+ * @summary List the authenticated user's saved contracts
+ */
+export const ListContractsResponse = zod.object({
+  contracts: zod.array(
+    zod.object({
+      id: zod.string(),
+      contractType: zod.string(),
+      createdAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Retrieve one saved contract owned by the user
+ */
+export const GetContractParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetContractResponse = zod.object({
+  contract: zod.object({
+    id: zod.string(),
+    contractType: zod.string(),
+    generatedText: zod.string(),
+    createdAt: zod.string(),
+  }),
+});
+
+/**
+ * @summary List the authenticated user's saved reviews
+ */
+export const ListReviewsResponse = zod.object({
+  reviews: zod.array(
+    zod.object({
+      id: zod.string(),
+      filename: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Retrieve one saved review owned by the user
+ */
+export const GetReviewParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetReviewResponse = zod.object({
+  review: zod.object({
+    id: zod.string(),
+    filename: zod.string().nullish(),
+    findings: zod.array(zod.record(zod.string(), zod.unknown())),
+    createdAt: zod.string(),
+  }),
+});
+
+/**
  * Returns server health status
  * @summary Health check
  */

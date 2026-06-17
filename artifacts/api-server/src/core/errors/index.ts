@@ -31,10 +31,31 @@ export class ValidationError extends AppError {
   }
 }
 
+/** 401 — authentication required or failed. */
+export class UnauthorizedError extends AppError {
+  constructor(message = "يجب تسجيل الدخول") {
+    super(message, 401, { expose: true });
+  }
+}
+
+/** 403 — authenticated but the request is not permitted (e.g. CSRF origin check). */
+export class ForbiddenError extends AppError {
+  constructor(message = "غير مصرّح") {
+    super(message, 403, { expose: true });
+  }
+}
+
 /** 404 — resource not found. */
 export class NotFoundError extends AppError {
   constructor(message = "غير موجود") {
     super(message, 404, { expose: true });
+  }
+}
+
+/** 409 — resource conflict (e.g. duplicate email). */
+export class ConflictError extends AppError {
+  constructor(message = "تعارض في البيانات") {
+    super(message, 409, { expose: true });
   }
 }
 

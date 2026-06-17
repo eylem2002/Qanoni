@@ -1,6 +1,12 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { reviewUpload, reviewText } from "./controller";
+import { requireAuth } from "../../api/middlewares";
+import {
+  reviewUpload,
+  reviewText,
+  listReviews,
+  getReview,
+} from "./controller";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -22,8 +28,16 @@ const upload = multer({
 
 const reviewRouter: IRouter = Router();
 
-reviewRouter.post("/contracts/review", upload.single("contract"), reviewUpload);
+reviewRouter.get("/reviews", requireAuth, listReviews);
+reviewRouter.get("/reviews/:id", requireAuth, getReview);
+
+reviewRouter.post(
+  "/contracts/review",
+  requireAuth,
+  upload.single("contract"),
+  reviewUpload,
+);
 // Accepts plain JSON { contractText } — used when reviewing a just-generated contract
-reviewRouter.post("/contracts/review-text", reviewText);
+reviewRouter.post("/contracts/review-text", requireAuth, reviewText);
 
 export default reviewRouter;

@@ -19,6 +19,7 @@ export interface GenerationPlan {
   articlesText: string;
   validate: (assembled: string) => ValidationResult;
   lawWarnings: string[];
+  lawArticlesUsed: unknown;
   errorLabel: string;
   incompleteError: string;
   failureError: string;
@@ -57,7 +58,7 @@ export async function prepareGeneration(
   const data = sanitizeObject(body);
   config.guard?.(data);
 
-  const { articlesText, lawWarnings } = await loadArticles(
+  const { articlesText, lawWarnings, articles } = await loadArticles(
     config.type,
     log,
     config.fallbackLaw,
@@ -79,6 +80,7 @@ export async function prepareGeneration(
     articlesText,
     validate,
     lawWarnings,
+    lawArticlesUsed: articles,
     errorLabel: config.errorLabel,
     incompleteError: config.incompleteError,
     failureError: config.failureError,

@@ -23,6 +23,8 @@ export interface RagRetrievalResult {
  * Main function: Query the law system for articles
  * Call this from contract generation routes
  */
+const LAW_SYSTEM_TIMEOUT_MS = 8000;
+
 export async function retrieveArticlesForContract(
   contractType: string,
   lawSystemBaseUrl: string = process.env.LAW_SYSTEM_URL || "http://localhost:8080"
@@ -30,7 +32,18 @@ export async function retrieveArticlesForContract(
   const url = new URL(`${lawSystemBaseUrl}/api/rag/retrieve`);
   url.searchParams.set("contractType", contractType);
 
-  const response = await fetch(url.toString());
+  // Bound the call: a slow/hanging law system must surface as an error so the
+  // caller (LawService.loadArticles) can degrade to its fallback rather than
+  // stalling the whole generation request.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LAW_SYSTEM_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     throw new Error(

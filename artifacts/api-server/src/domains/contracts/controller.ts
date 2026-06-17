@@ -2,6 +2,12 @@ import type { RequestHandler } from "express";
 import { streamHybridContract } from "./clauses";
 import { prepareGeneration } from "./logic/ContractsLogic";
 import {
+  persistContract,
+  getContractsForUser,
+  getContractForUser,
+} from "./logic/ContractsStore";
+import { NotFoundError } from "../../core/errors";
+import {
   buildWordDocument,
   buildReportDocument,
 } from "../../services/wordExport/WordExportService";
@@ -17,7 +23,8 @@ function arabicDate(): string {
   });
 }
 
-/** Streams a hybrid contract of the given type as NDJSON. */
+/** Streams a hybrid contract of the given type as NDJSON. Persists the
+    assembled contract for the authenticated user once it validates. */
 export function generate(type: string): RequestHandler {
   return async (req, res) => {
     const plan = await prepareGeneration(
@@ -25,9 +32,40 @@ export function generate(type: string): RequestHandler {
       req.body as Record<string, unknown>,
       req.log,
     );
-    await streamHybridContract(req, res, plan);
+    const userId = req.session.userId;
+    await streamHybridContract(req, res, {
+      ...plan,
+      onComplete: async ({ valid, contract }) => {
+        if (!valid || !contract || !userId) return;
+        await persistContract({
+          userId,
+          contractType: type,
+          generatedText: contract,
+          inputData: plan.data,
+          lawArticlesUsed: plan.lawArticlesUsed,
+        });
+      },
+    });
   };
 }
+
+/** Lists the authenticated user's saved contracts (metadata only). */
+export const listContracts: RequestHandler = async (req, res) => {
+  const userId = req.session.userId!;
+  const contracts = await getContractsForUser(userId);
+  res.json({ contracts });
+};
+
+/** Retrieves one saved contract owned by the authenticated user. */
+export const getContract: RequestHandler = async (req, res, next) => {
+  const userId = req.session.userId!;
+  const contract = await getContractForUser(userId, req.params.id as string);
+  if (!contract) {
+    next(new NotFoundError("العقد غير موجود"));
+    return;
+  }
+  res.json({ contract });
+};
 
 export const exportReport: RequestHandler = async (req, res) => {
   const { findings, filename } = req.body as {

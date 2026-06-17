@@ -12,6 +12,7 @@ export async function reviewText(body: { contractText: string; label: string }):
   const res = await fetch("/api/contracts/review-text", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(body),
   });
   return res.json();
@@ -21,7 +22,11 @@ export async function reviewText(body: { contractText: string; label: string }):
 export async function reviewFile(file: File): Promise<{ ok: boolean; data: ReviewResponse }> {
   const formData = new FormData();
   formData.append("contract", file);
-  const res = await fetch("/api/contracts/review", { method: "POST", body: formData });
+  const res = await fetch("/api/contracts/review", {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
   const data: ReviewResponse = await res.json();
   return { ok: res.ok, data };
 }
@@ -31,6 +36,7 @@ export async function exportReport(body: { findings: Finding[]; filename: string
   const res = await fetch("/api/contracts/export-report", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error("export-report failed");

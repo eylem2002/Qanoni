@@ -11,6 +11,7 @@ import type { Finding, ReviewResult } from "@/domains/review/types";
 import { downloadBlob } from "@/lib/download";
 import { PageShell } from "@/components/layout/PageShell";
 import { Spinner } from "@/components/Spinner";
+import { LogoutButton } from "@/app/auth/LogoutButton";
 
 type StatusKey = "green" | "yellow" | "red";
 
@@ -138,27 +139,30 @@ export function ReviewerPortal() {
     : null;
 
   const headerAction = (
-    <Box
-      component={Link}
-      to="/"
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 1,
-        fontSize: 14,
-        fontWeight: 500,
-        color: "text.secondary",
-        textDecoration: "none",
-        border: "1px solid",
-        borderColor: "divider",
-        borderRadius: 2,
-        px: 2,
-        py: 1,
-        "&:hover": { color: "primary.main", borderColor: "primary.main" },
-      }}
-    >
-      <FileText className="w-4 h-4" />
-      توليد عقد جديد
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+      <Box
+        component={Link}
+        to="/"
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          fontSize: 14,
+          fontWeight: 500,
+          color: "text.secondary",
+          textDecoration: "none",
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 2,
+          px: 2,
+          py: 1,
+          "&:hover": { color: "primary.main", borderColor: "primary.main" },
+        }}
+      >
+        <FileText className="w-4 h-4" />
+        توليد عقد جديد
+      </Box>
+      <LogoutButton />
     </Box>
   );
 

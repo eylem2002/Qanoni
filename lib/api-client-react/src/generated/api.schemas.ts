@@ -66,3 +66,68 @@ export interface ContractValidationError {
 export interface ApiError {
   error: string;
 }
+
+export interface SignupInput {
+  email: string;
+  password: string;
+  firmName?: string;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  firmName?: string | null;
+}
+
+export interface AuthResult {
+  user: AuthUser;
+}
+
+export interface ContractSummary {
+  id: string;
+  contractType: string;
+  createdAt: string;
+}
+
+export interface ContractListResult {
+  contracts: ContractSummary[];
+}
+
+export interface SavedContract {
+  id: string;
+  contractType: string;
+  generatedText: string;
+  createdAt: string;
+}
+
+export interface SavedContractResult {
+  contract: SavedContract;
+}
+
+export interface ReviewSummary {
+  id: string;
+  filename?: string | null;
+  createdAt: string;
+}
+
+export interface ReviewListResult {
+  reviews: ReviewSummary[];
+}
+
+export type SavedReviewFindingsItem = { [key: string]: unknown };
+
+export interface SavedReview {
+  id: string;
+  filename?: string | null;
+  findings: SavedReviewFindingsItem[];
+  createdAt: string;
+}
+
+export interface SavedReviewResult {
+  review: SavedReview;
+}
