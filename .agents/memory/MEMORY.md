@@ -1,3 +1,5 @@
 - [api-server dev has no watch](api-server-no-watch.md) — `dev` is `build && start`; code edits need a workflow restart or you verify against a stale build.
 - [Streaming verification from bash](streaming-verification.md) — the bash tool kills backgrounded jobs on return; run long (~40s+) stream tests synchronously in one foreground call.
 - [Hybrid contract pipeline](hybrid-contract-pipeline.md) — fixed statutory clauses are deterministic verbatim; only variable sections are LLM-drafted; NDJSON envelope is a hard contract with the frontend.
+- [MUI v9 quirks (legal-ai)](mui-v9-legal-ai.md) — v9 has no Grid (use Box CSS grid) and drops inputProps (use slotProps.htmlInput); RTL via emotion + stylis-plugin-rtl.
+- [Streaming preview overlay](streaming-preview-overlay.md) — ContractPreview must always render generatedContract with the spinner as an absolute overlay, never replace text with the spinner, so streamed text stays visible.

@@ -18,18 +18,27 @@ Generates Jordanian-law contracts (employment, rental, service, NDA, supplier) i
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Build: esbuild (CJS bundle, api-server) / Vite (legal-ai)
+- Frontend: React + Redux Toolkit, MUI v9 (RTL dark, emotion + stylis-plugin-rtl), React Router, react-hook-form. No Tailwind/Shadcn/Wouter.
 
-## Where things live
+## Where things live (INSIGHT V3.0 layered architecture)
 
-- `artifacts/api-server/src/routes/contracts/` — contract generation routes (one per type).
-- `artifacts/api-server/src/routes/contracts/clauses/` — hybrid engine + per-type templates (source of truth for clause text).
-  - `engine.ts` — `buildHybridPrompt`, `parseSections`, `assembleContract`, `streamHybridContract`, `missingRequiredSections`.
-  - `types.ts` — `FixedClause` / `VariableClause` / `ContractTemplate`.
-  - `employment.ts`, `rental.ts`, `service.ts`, `nda.ts`, `supplier.ts` — templates + co-located Zod bodies.
-- `artifacts/api-server/src/lib/law-client.ts` — RAG: `retrieveArticlesForContract`, `formatArticlesForPrompt`.
-- `artifacts/legal-ai/src/components/ContractForms.tsx` — the shared `submitContract` NDJSON streaming consumer (exported).
-- `artifacts/legal-ai/src/pages/Home.tsx` — main UI; employment + non-employment forms.
+Backend (`artifacts/api-server/src/`) — layered: `core/` → `infra/` → `services/` → `domains/` → `api/`, wired by `bootstrap/`.
+- `core/` — `errors/` (AppError hierarchy), `logger/`, `utils/` (sanitizer), `constants/`. No outward deps.
+- `infra/anthropic/` — Anthropic client wrapper.
+- `services/law/` — RAG: `retrieveArticlesForContract`, `formatArticlesForPrompt`, article loading. `services/wordExport/` — Word generation.
+- `domains/contracts/` — `contracts.controller.ts` (HTTP/NDJSON), `contracts.logic/` (orchestration), `contractRegistry`, `clauses/` (hybrid engine + per-type templates — source of truth for clause text), `data/` (jordan-labor-law).
+  - `clauses/engine.ts` — `buildHybridPrompt`, `parseSections`, `assembleContract`, `streamHybridContract`, `missingRequiredSections`.
+  - `clauses/types.ts` — `FixedClause` / `VariableClause` / `ContractTemplate`.
+  - `clauses/{employment,rental,service,nda,supplier}.ts` — templates + co-located Zod bodies.
+- `domains/review/` — contract review logic.
+- `api/middlewares/` (rateLimiters, validate, notFound/error handlers), `api/routes/` (route registry, health). `bootstrap/` — `initApi`, route registration; `app.ts` uses bootstrap.
+
+Frontend (`artifacts/legal-ai/src/`) — `main.tsx` → `app/` → `portals/` + `domains/`.
+- `app/` — `App`, `providers/` (Redux/Query/Theme RTL), `router/` (AppRouter + routeRegistry), `store/` (+ `slices/contractSlice.ts`), `theme/`.
+- `portals/home/` — `HomePortal` (form side) + `ContractPreview` (streamed output, overlay-while-generating). `portals/reviewer/`, `portals/notFound/`.
+- `domains/contracts/` — `forms/` (5 MUI forms), `constants.ts` (`CONTRACT_TYPE_LABEL`, `LOADING_MESSAGES` Records), `contractsApi.ts` (`submitContract` NDJSON consumer + `exportContractWord`), `useContractStream.ts` (wires callbacks → Redux), `types.ts`. `domains/review/` — review helpers.
+- `components/form/` — RHF wrappers (`RHFTextField`, `RHFSelect`, `RHFSwitch`). `components/layout/PageShell.tsx`. `hooks/`, `lib/`, `types/`.
 
 ## Architecture decisions
 
