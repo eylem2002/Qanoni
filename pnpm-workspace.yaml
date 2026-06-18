@@ -95,8 +95,9 @@ overrides:
   lightningcss>lightningcss-win32-x64-msvc: "-"
   rollup>@rollup/rollup-android-arm-eabi: "-"
   rollup>@rollup/rollup-android-arm64: "-"
-  rollup>@rollup/rollup-darwin-arm64: "-"
-  rollup>@rollup/rollup-darwin-x64: "-"
+  # rollup native binaries — allow the local platform's binary to install
+  # rollup>@rollup/rollup-darwin-arm64: "-"   # needed on Apple Silicon Macs
+  # rollup>@rollup/rollup-darwin-x64: "-"     # needed on Intel Macs
   rollup>@rollup/rollup-freebsd-arm64: "-"
   rollup>@rollup/rollup-freebsd-x64: "-"
   rollup>@rollup/rollup-linux-arm-gnueabihf: "-"
