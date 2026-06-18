@@ -1,8 +1,8 @@
 import type { Request, Response } from "express";
-import { anthropic } from "../../../infra/anthropic";
+import { openai } from "../../../infra/anthropic";
 import { type ContractTemplate, getVariableClauses } from "./types";
 
-const AI_MODEL = "claude-sonnet-4-6";
+const AI_MODEL = "gpt-4o";
 const MAX_TOKENS = 8192;
 
 export const MIN_WAGE_JD = 290;
@@ -170,25 +170,31 @@ export async function streamHybridContract<T>(
   };
 
   const prompt = buildHybridPrompt(opts.template, opts.data, opts.articlesText);
-  const stream = anthropic.messages.stream({
-    model: AI_MODEL,
-    max_tokens: MAX_TOKENS,
-    messages: [{ role: "user", content: prompt }],
-  });
 
-  // If the client disconnects, stop generating and stop writing.
+  // If the client disconnects, abort the in-flight OpenAI request.
   let aborted = false;
+  const controller = new AbortController();
   const onClose = () => {
     aborted = true;
-    stream.abort();
+    controller.abort();
   };
   res.on("close", onClose);
 
+  const stream = await openai.chat.completions.create(
+    {
+      model: AI_MODEL,
+      max_tokens: MAX_TOKENS,
+      messages: [{ role: "user", content: prompt }],
+      stream: true,
+    },
+    { signal: controller.signal },
+  );
+
   try {
     let raw = "";
-    for await (const event of stream) {
-      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        const text = event.delta.text;
+    for await (const chunk of stream) {
+      const text = chunk.choices[0]?.delta?.content ?? "";
+      if (text) {
         raw += text;
         // Keepalive + progress. Final displayed document is the assembled
         // `contract` in the done event, so partial markers here are harmless.

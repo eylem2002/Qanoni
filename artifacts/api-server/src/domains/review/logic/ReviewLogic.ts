@@ -8,10 +8,10 @@
 ══════════════════════════════════════════════════════════ */
 
 import mammoth from "mammoth";
-import { anthropic } from "../../../infra/anthropic";
+import { openai } from "../../../infra/anthropic";
 import { AppError, UnprocessableError } from "../../../core/errors";
 
-const REVIEW_MODEL = "claude-sonnet-4-6";
+const REVIEW_MODEL = "gpt-4o";
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
@@ -83,13 +83,13 @@ export async function analyzeContract(
   contractText: string,
   log: ReviewLogger,
 ): Promise<unknown[]> {
-  const message = await anthropic.messages.create({
+  const response = await openai.chat.completions.create({
     model: REVIEW_MODEL,
     max_tokens: 4096,
     messages: [{ role: "user", content: buildReviewPrompt(contractText) }],
   });
 
-  const rawText = message.content[0].type === "text" ? message.content[0].text : "";
+  const rawText = response.choices[0]?.message?.content ?? "";
   const cleaned = rawText.replace(/```json|```/gi, "").trim();
 
   let findings: unknown[];
@@ -97,7 +97,7 @@ export async function analyzeContract(
     findings = JSON.parse(cleaned);
     if (!Array.isArray(findings)) throw new Error("not an array");
   } catch {
-    log.error({ rawText }, "Failed to parse review JSON from Claude");
+    log.error({ rawText }, "Failed to parse review JSON from OpenAI");
     throw new AppError("تعذر تحليل نتيجة المراجعة. حاول مرة أخرى.", 500, {
       expose: true,
     });
