@@ -36,19 +36,19 @@ A full-stack web application for generating and reviewing Jordanian-law-complian
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Runtime | Node.js 24 |
-| Language | TypeScript 5.9 (strict) |
-| Package Manager | pnpm workspaces |
-| Frontend | React 18 + Vite + Tailwind CSS + shadcn/ui |
-| Backend | Express 5 |
-| Database | PostgreSQL + Drizzle ORM |
-| Validation | Zod (v4) + drizzle-zod |
-| AI | Anthropic Claude (`claude-sonnet-4-6`) |
-| API Contracts | OpenAPI 3.1 → Orval codegen |
-| Word Export | `docx` npm package (server-side) |
-| PDF Parsing | `pdf-parse` (lazy-loaded) + `mammoth` (DOCX) |
+| Layer           | Technology                                   |
+| --------------- | -------------------------------------------- |
+| Runtime         | Node.js 24                                   |
+| Language        | TypeScript 5.9 (strict)                      |
+| Package Manager | pnpm workspaces                              |
+| Frontend        | React 18 + Vite + Tailwind CSS + shadcn/ui   |
+| Backend         | Express 5                                    |
+| Database        | PostgreSQL + Drizzle ORM                     |
+| Validation      | Zod (v4) + drizzle-zod                       |
+| AI              | Anthropic Claude (`claude-sonnet-4-6`)       |
+| API Contracts   | OpenAPI 3.1 → Orval codegen                  |
+| Word Export     | `docx` npm package (server-side)             |
+| PDF Parsing     | `pdf-parse` (lazy-loaded) + `mammoth` (DOCX) |
 
 ---
 
@@ -75,23 +75,23 @@ pnpm --filter @workspace/db run push
 
 ## Required Environment Variables
 
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `SESSION_SECRET` | Express session signing key |
-| `ANTHROPIC_API_KEY` | Anthropic AI access (managed via Replit integration) |
-| `PORT` | Injected automatically by the Replit workflow per artifact |
+| Variable            | Purpose                                                           |
+| ------------------- | ----------------------------------------------------------------- |
+| `DATABASE_URL`      | PostgreSQL connection string                                      |
+| `SESSION_SECRET`    | Express session signing key                                       |
+| `ANTHROPIC_API_KEY` | Anthropic AI access from your local environment or secret manager |
+| `PORT`              | Set by the local dev script or shell for the app you are running  |
 
 ---
 
 ## README Index
 
-| Package | README |
-|---|---|
-| Frontend app | `artifacts/legal-ai/README.md` |
-| Backend API | `artifacts/api-server/README.md` |
-| Database | `lib/db/README.md` |
-| OpenAPI spec | `lib/api-spec/README.md` |
-| Zod schemas | `lib/api-zod/README.md` |
-| React Query hooks | `lib/api-client-react/README.md` |
+| Package           | README                                    |
+| ----------------- | ----------------------------------------- |
+| Frontend app      | `artifacts/legal-ai/README.md`            |
+| Backend API       | `artifacts/api-server/README.md`          |
+| Database          | `lib/db/README.md`                        |
+| OpenAPI spec      | `lib/api-spec/README.md`                  |
+| Zod schemas       | `lib/api-zod/README.md`                   |
+| React Query hooks | `lib/api-client-react/README.md`          |
 | Anthropic wrapper | `lib/integrations-anthropic-ai/README.md` |

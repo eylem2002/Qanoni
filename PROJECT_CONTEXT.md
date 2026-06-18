@@ -41,11 +41,12 @@ This is a **pnpm workspace monorepo** running on Node.js 24 / TypeScript 5.9 (st
 ```
 
 ### Key conventions
+
 - All packages are named `@workspace/<name>` (e.g., `@workspace/api-server`).
 - `lib/*` packages are composite TypeScript (emit declarations).
 - `artifacts/*` are leaf packages (typecheck only with `tsc --noEmit`).
 - Root `tsconfig.json` lists only `lib/*` packages.
-- Never run `pnpm dev` at the workspace root. Each artifact has its own Replit workflow.
+- Never run `pnpm dev` at the workspace root. Start the specific package you want to work on.
 - A shared reverse proxy routes traffic: `/api` → api-server, `/` → legal-ai.
 - Paths are **not rewritten** by the proxy — services handle their own full path prefix.
 
@@ -53,39 +54,39 @@ This is a **pnpm workspace monorepo** running on Node.js 24 / TypeScript 5.9 (st
 
 ## 3. Technology Stack
 
-| Layer | Technology | Notes |
-|---|---|---|
-| Runtime | Node.js 24 | |
-| Language | TypeScript 5.9 strict | All packages |
-| Package Manager | pnpm workspaces | |
-| Frontend framework | React 18 + Vite | |
-| Frontend styling | Tailwind CSS v3 + shadcn/ui | Dark theme, RTL |
-| Frontend icons | lucide-react | |
-| Frontend forms | react-hook-form + zodResolver | |
-| Frontend data fetching | TanStack Query (React Query v5) | via generated hooks |
-| Backend framework | Express 5 | |
-| Database | PostgreSQL + Drizzle ORM | Schema currently empty |
-| Input validation | Zod (v4) + drizzle-zod | |
-| AI provider | Anthropic Claude | via Replit integration |
-| AI model | `claude-sonnet-4-6` | `max_tokens: 8192` for generation, `4096` for review |
-| API code generation | Orval (from OpenAPI spec) | generates Zod schemas + React Query hooks |
-| Word export | `docx` npm package | server-side, no puppeteer |
-| PDF parsing | `pdf-parse@1.1.1` | lazy-loaded via `require()` — see critical note below |
-| DOCX parsing | `mammoth` | |
-| Logging | pino + pino-http | `req.log` in routes, `logger` elsewhere — NEVER `console.log` |
-| Rate limiting | `express-rate-limit` | Two separate limiters |
+| Layer                  | Technology                      | Notes                                                         |
+| ---------------------- | ------------------------------- | ------------------------------------------------------------- |
+| Runtime                | Node.js 24                      |                                                               |
+| Language               | TypeScript 5.9 strict           | All packages                                                  |
+| Package Manager        | pnpm workspaces                 |                                                               |
+| Frontend framework     | React 18 + Vite                 |                                                               |
+| Frontend styling       | Tailwind CSS v3 + shadcn/ui     | Dark theme, RTL                                               |
+| Frontend icons         | lucide-react                    |                                                               |
+| Frontend forms         | react-hook-form + zodResolver   |                                                               |
+| Frontend data fetching | TanStack Query (React Query v5) | via generated hooks                                           |
+| Backend framework      | Express 5                       |                                                               |
+| Database               | PostgreSQL + Drizzle ORM        | Schema currently empty                                        |
+| Input validation       | Zod (v4) + drizzle-zod          |                                                               |
+| AI provider            | Anthropic Claude                | via environment-provided credentials                          |
+| AI model               | `claude-sonnet-4-6`             | `max_tokens: 8192` for generation, `4096` for review          |
+| API code generation    | Orval (from OpenAPI spec)       | generates Zod schemas + React Query hooks                     |
+| Word export            | `docx` npm package              | server-side, no puppeteer                                     |
+| PDF parsing            | `pdf-parse@1.1.1`               | lazy-loaded via `require()` — see critical note below         |
+| DOCX parsing           | `mammoth`                       |                                                               |
+| Logging                | pino + pino-http                | `req.log` in routes, `logger` elsewhere — NEVER `console.log` |
+| Rate limiting          | `express-rate-limit`            | Two separate limiters                                         |
 
 ---
 
 ## 4. Environment Variables
 
-| Variable | Where Used | Notes |
-|---|---|---|
-| `DATABASE_URL` | `lib/db` | PostgreSQL connection string |
-| `SESSION_SECRET` | `artifacts/api-server` | Express session signing |
-| `ANTHROPIC_API_KEY` | `lib/integrations-anthropic-ai` | Injected by Replit Anthropic integration — never set manually |
-| `PORT` | Both artifacts | Injected per-artifact by Replit workflow config |
-| `BASE_PATH` | Both artifacts | Injected per-artifact by Replit workflow config |
+| Variable            | Where Used                      | Notes                                         |
+| ------------------- | ------------------------------- | --------------------------------------------- |
+| `DATABASE_URL`      | `lib/db`                        | PostgreSQL connection string                  |
+| `SESSION_SECRET`    | `artifacts/api-server`          | Express session signing                       |
+| `ANTHROPIC_API_KEY` | `lib/integrations-anthropic-ai` | Provided by the environment or secret manager |
+| `PORT`              | Both artifacts                  | Set per app when running locally              |
+| `BASE_PATH`         | Both artifacts                  | Defaults to `/` for local development         |
 
 ---
 
@@ -98,6 +99,7 @@ This is a **pnpm workspace monorepo** running on Node.js 24 / TypeScript 5.9 (st
 `index.ts` reads `process.env.PORT` and starts the Express server.
 
 `app.ts` builds the Express app with this exact middleware stack in order:
+
 1. `pino-http` — structured request logging
 2. `cors()` — allow all origins
 3. `express.json()` — parse JSON bodies
@@ -111,6 +113,7 @@ Both rate limiters use `standardHeaders: true`, `legacyHeaders: false`, and retu
 ### 5.2 Routes Overview
 
 All routes are mounted under `/api`. The main router delegates:
+
 - `GET /api/healthz` → `routes/health.ts` → returns `{ status: "ok" }`
 - All contract routes → `routes/contracts/index.ts` (generation + export)
 - Review routes → `routes/contracts/review.ts`
@@ -120,6 +123,7 @@ All routes are mounted under `/api`. The main router delegates:
 Two functions protect every route from prompt injection:
 
 **`sanitizeInput(value: unknown): unknown`**
+
 - Only processes strings
 - Trims whitespace
 - Searches for 9 injection patterns using regex (`/gi` flags):
@@ -136,10 +140,12 @@ Two functions protect every route from prompt injection:
 - Does NOT truncate — length limits are enforced by Zod schemas upstream
 
 **`sanitizeObject<T>(obj: T): T`**
+
 - Calls `sanitizeInput` on every string value in a flat object
 - Used on every parsed request body before building an AI prompt
 
 **`STRICT_RULES_BASE`** — a constant Arabic string injected into every AI prompt:
+
 ```
 القواعد الصارمة:
 1. لا تستخدم أي رموز تعبيرية (Emoji)
@@ -152,6 +158,7 @@ Two functions protect every route from prompt injection:
 ### 5.4 Employment Contract Route (`POST /api/contracts/generate`)
 
 **Constants:**
+
 - `MIN_WAGE_JD = 290` (Jordanian minimum wage in dinars)
 - `AI_MODEL = "claude-sonnet-4-6"`
 - `MAX_TOKENS = 8192`
@@ -159,6 +166,7 @@ Two functions protect every route from prompt injection:
 **Validation (Zod schema `GenerateContractBody` from `@workspace/api-zod`):**
 
 Fields and their limits:
+
 ```typescript
 employerName: string (min 2)
 employerRegistrationNumber?: string (optional)
@@ -185,6 +193,7 @@ specialConditions?: string (optional, max 1000 implied)
 Extra business rule: `probationPeriodDays` must not exceed 90 (Article 35 of Jordanian Labor Law). Returns `400` if violated.
 
 **Prompt Construction (`buildEmploymentPrompt`):**
+
 - Opens with system role: "أنت كاتب عدل قانوني أردني متخصص"
 - Injects `STRICT_RULES_BASE`
 - Adds two extra rules: no own knowledge, start immediately with "عقد عمل"
@@ -201,6 +210,7 @@ Extra business rule: `probationPeriodDays` must not exceed 90 (Article 35 of Jor
 **Post-generation validation (`validateEmploymentContract`):**
 
 Checks the generated text contains these Arabic strings:
+
 - `"قانون العمل الأردني"` — Labor Law reference
 - `"رقم (8) لسنة 1996"` — Law number
 - `"الراتب"` — Salary clause
@@ -209,6 +219,7 @@ Checks the generated text contains these Arabic strings:
 - `"التوقيع"` — Signature block
 
 Also checks:
+
 - Text length ≥ 2000 characters (otherwise adds warning)
 - Salary ≥ MIN_WAGE (otherwise adds warning)
 
@@ -220,6 +231,7 @@ If `valid === true` → HTTP 200 with `{ contract: string, validationWarnings: s
 ### 5.5 Rental Contract Route (`POST /api/contracts/generate-rental`)
 
 **Zod schema `RentalBody` (defined inline, not in OpenAPI):**
+
 ```typescript
 landlordName: string (min 2, max 200)
 tenantName: string (min 2, max 200)
@@ -235,6 +247,7 @@ specialConditions?: string (max 1000, optional)
 ```
 
 **Prompt:** References Jordanian Civil Law No. 43/1976 and Real Estate Rental Law No. 11/1994. Extra rules:
+
 - Eviction clause with minimum 1-month notice
 - Contract termination from either party
 - Maintenance: major on landlord, minor on tenant
@@ -246,6 +259,7 @@ specialConditions?: string (max 1000, optional)
 ### 5.6 Service Contract Route (`POST /api/contracts/generate-service`)
 
 **Zod schema `ServiceBody` (inline):**
+
 ```typescript
 clientName: string (min 2, max 200)
 providerName: string (min 2, max 200)
@@ -261,6 +275,7 @@ specialConditions?: string (max 1000, optional)
 ```
 
 **Prompt:** References Jordanian Civil Law No. 43/1976. Extra rules:
+
 - Provider independence clause (not an employee)
 - Acceptance/rejection procedures
 - Early termination clause with financial consequences
@@ -272,6 +287,7 @@ specialConditions?: string (max 1000, optional)
 ### 5.7 NDA Contract Route (`POST /api/contracts/generate-nda`)
 
 **Zod schema `NdaBody` (inline):**
+
 ```typescript
 partyOneName: string (min 2, max 200)     ← the disclosing party
 partyTwoName: string (min 2, max 200)     ← the receiving party
@@ -284,6 +300,7 @@ startDate: string
 ```
 
 **Prompt:** References Jordanian Civil Law + competition/trade secrets law. Extra rules:
+
 - One-directional NDA (from party 1 to party 2)
 - Explicit list of confidentiality exceptions (public info, pre-authorized disclosure, legally required)
 - Return/destruction of information upon expiry
@@ -295,6 +312,7 @@ startDate: string
 ### 5.8 Supplier Contract Route (`POST /api/contracts/generate-supplier`)
 
 **Zod schema `SupplierBody` (inline):**
+
 ```typescript
 buyerName: string (min 2, max 200)
 supplierName: string (min 2, max 200)
@@ -310,6 +328,7 @@ specialConditions?: string (max 1000, optional)
 ```
 
 **Prompt:** References Jordanian Civil Law + Commercial Law No. 12/1966. Extra rules:
+
 - Delivery inspection/acceptance clause
 - Force majeure clause
 - Governing law: Jordanian courts
@@ -323,21 +342,25 @@ specialConditions?: string (max 1000, optional)
 **File:** `artifacts/api-server/src/routes/contracts/review.ts`
 
 Uses `multer` with memory storage. Config:
+
 - `fileSize` limit: 5 MB
 - `files` limit: 1
 - Accepted MIME types: `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/msword`, `text/plain`
 
 **Text extraction (`extractText`):**
+
 - PDF: calls `getPdfParse()` which lazy-loads `pdf-parse` via `require()` — THIS IS CRITICAL. `pdf-parse@1.1.1` reads a test file at module load time and crashes if imported at the top of the file. Always use this lazy-load pattern.
 - DOCX/DOC: `mammoth.extractRawText({ buffer })`
 - TXT: `buffer.toString("utf-8")`
 
 **Guards before AI call:**
+
 - If no file → 400
 - If extraction fails → 422
 - If extracted text is < 100 chars → 422 "empty file"
 
 **Review prompt (`buildReviewPrompt`):**
+
 - Role: "أنت محامٍ أردني خبير في مراجعة العقود"
 - Strict rules: respond ONLY with valid JSON — no text before or after, no backticks
 - Classification: `"green"` (safe), `"yellow"` (unusual/needs review), `"red"` (serious legal problem or missing mandatory clause)
@@ -347,6 +370,7 @@ Uses `multer` with memory storage. Config:
 - All text in Arabic
 
 **Required JSON response shape (array of objects):**
+
 ```json
 {
   "status": "green" | "yellow" | "red",
@@ -384,6 +408,7 @@ Response: `{ findings, charCount, filename: "عقد مولَّد" }`
 Body: `{ contractText: string, contractTypeLabel: string, partyName: string }`
 
 Calls `buildWordDocument(opts)`:
+
 - Splits contract text by `\n`
 - Separator lines (matching `/^[━─=]{5,}$/`) become horizontal rule paragraphs with golden border (`#C9A94E`)
 - Heading lines (matching `/^(الجزء|البند|عقد |اتفاقية |المراجع القانونية|التوقيعات)/`) get `bold: true`, size 24 (12pt), `before: 160` spacing
@@ -403,6 +428,7 @@ Returns binary `.docx` buffer via `Packer.toBuffer(doc)`. Response headers set t
 Body: `{ findings: Finding[], filename: string }`
 
 Calls `buildReportDocument(opts)`:
+
 - Header: `"قانوني AI — تقرير مراجعة العقد | {date}"`
 - Title block: `"تقرير مراجعة العقد"` + filename + summary line: `"خطر: X | مراجعة: Y | آمن: Z"`
 - Each finding renders as 2-3 paragraphs:
@@ -422,12 +448,14 @@ React 18 + Vite. Entry point: `src/main.tsx` → renders `<App />` inside React 
 ### 6.1 Routing (`src/App.tsx`)
 
 React Router v6 with two routes:
+
 - `/` → `<Home />` — contract generation
 - `/review` → `<ContractReviewer />` — contract review
 
 ### 6.2 Theme and Layout
 
 Global CSS sets:
+
 - `background: hsl(222, 47%, 6%)` — very dark navy
 - `--primary: #C9A94E` — gold color used throughout
 - `dir="rtl"` on the HTML element — entire app is right-to-left
@@ -436,6 +464,7 @@ Global CSS sets:
 ### 6.3 Home Page (`src/pages/Home.tsx`)
 
 **State:**
+
 ```typescript
 generatedContract: string | null     ← the AI-returned contract text
 validationWarnings: string[]         ← legal warnings from server
@@ -454,6 +483,7 @@ copied: boolean                      ← clipboard feedback (resets after 2s)
 Uses `react-hook-form` with `zodResolver(formSchema)`. The `formSchema` mirrors the server's `GenerateContractBody` with client-side messages.
 
 Notable UI behaviors:
+
 - Real-time `belowMinWage` warning when `monthlySalary < 290`
 - Benefits as a multi-checkbox grid (8 options)
 - Advanced section (collapsible) contains: department, direct manager, work location, IP rights, special conditions
@@ -466,17 +496,21 @@ When `contractType !== "employment"`, the employment form is hidden and the corr
 
 **Action buttons (shown after generation):**
 
-| Button | Action |
-|---|---|
-| نسخ | `navigator.clipboard.writeText(generatedContract)` |
+| Button     | Action                                                                                                                                                    |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| نسخ        | `navigator.clipboard.writeText(generatedContract)`                                                                                                        |
 | تحميل Word | `handleDownloadWord()` — POST to `/api/contracts/export-word`, streams blob, triggers `<a>` download with filename `{contractTypeLabel}-{partyName}.docx` |
-| واتساب | Copies contract to clipboard, then opens `wa.me` in new tab |
-| مراجعة | `handleReviewThis()` — saves to `sessionStorage`, navigates to `/review` |
+| واتساب     | Copies contract to clipboard, then opens `wa.me` in new tab                                                                                               |
+| مراجعة     | `handleReviewThis()` — saves to `sessionStorage`, navigates to `/review`                                                                                  |
 
 **handleReviewThis flow:**
+
 ```typescript
 sessionStorage.setItem("reviewContract", generatedContract);
-sessionStorage.setItem("reviewContractLabel", CONTRACT_TYPE_LABEL[contractType]);
+sessionStorage.setItem(
+  "reviewContractLabel",
+  CONTRACT_TYPE_LABEL[contractType],
+);
 window.location.href = "/review";
 ```
 
@@ -487,6 +521,7 @@ window.location.href = "/review";
 Exports 4 React components: `RentalForm`, `ServiceForm`, `NdaForm`, `SupplierForm`.
 
 **Shared type:**
+
 ```typescript
 type FormCallbacks = {
   onResult: (contract: string, partyName: string) => void;
@@ -495,6 +530,7 @@ type FormCallbacks = {
 ```
 
 **Shared function `submitContract`:**
+
 ```typescript
 async function submitContract(
   url: string,
@@ -505,27 +541,32 @@ async function submitContract(
   partyName: string = ""
 ): Promise<void>
 ```
+
 - Sets `onLoadingChange(true)` → POST → sets `onLoadingChange(false)`
 - On HTTP 422 with `missingClauses` → shows Arabic error list
 - On success → calls `onResult(data.contract, partyName)`
 
 **RentalForm:**
+
 - Fields: landlordName, tenantName, propertyAddress, propertyType (select), monthlyRent, depositAmount, contractDurationMonths, startDate, paymentDayOfMonth, furnitureStatus (select), specialConditions
 - Party name sent: `tenantName`
 - Endpoint: `POST /api/contracts/generate-rental`
 
 **ServiceForm:**
+
 - Fields: clientName, providerName, serviceDescription, totalFee, deliveryDeadline, paymentTerms (select), ipOwnership (select), hasRevisions (switch), revisionCount (conditional), hasConfidentialityClause (switch), specialConditions
 - Party name sent: `clientName`
 - Endpoint: `POST /api/contracts/generate-service`
 
 **NdaForm:**
+
 - Fields: partyOneName, partyTwoName, purposeOfDisclosure, scopeOfConfidential, permittedDisclosures, confidentialityDurationYears, penaltyAmount (optional), startDate
 - Shows a static info box: "القانون الحاكم: القانون الأردني — المحاكم الأردنية المختصة"
 - Party name sent: `partyOneName`
 - Endpoint: `POST /api/contracts/generate-nda`
 
 **SupplierForm:**
+
 - Fields: buyerName, supplierName, goodsOrServices, totalContractValue, paymentTerms (select), deliverySchedule, deliveryLocation, warrantyPeriodDays, penaltyForDelay (optional), hasExclusivity (switch), specialConditions
 - Party name sent: `supplierName`
 - Endpoint: `POST /api/contracts/generate-supplier`
@@ -533,6 +574,7 @@ async function submitContract(
 ### 6.5 Contract Reviewer (`src/pages/ContractReviewer.tsx`)
 
 **State:**
+
 ```typescript
 dragOver: boolean           ← drag-and-drop visual state
 selectedFile: File | null   ← the chosen file
@@ -543,6 +585,7 @@ reportLoading: boolean      ← Word report export in progress
 ```
 
 **`ReviewResult` interface:**
+
 ```typescript
 interface ReviewResult {
   findings: Finding[];
@@ -552,6 +595,7 @@ interface ReviewResult {
 ```
 
 **`Finding` interface:**
+
 ```typescript
 interface Finding {
   status: "green" | "yellow" | "red";
@@ -565,6 +609,7 @@ interface Finding {
 **`STATUS_CONFIG` map** defines per-status: background color class, border class, icon component (`CheckCircle` / `AlertTriangle` / `AlertCircle`), icon color class, Arabic label, label background class.
 
 **Auto-review `useEffect` (runs once on mount):**
+
 ```typescript
 useEffect(() => {
   const stored = sessionStorage.getItem("reviewContract");
@@ -577,20 +622,23 @@ useEffect(() => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contractText: stored, label }),
-    })
+    });
     // ... sets result or shows error toast
   }
 }, []);
 ```
+
 This is the bridge between the Home page "مراجعة" button and the reviewer page.
 
 **File upload area:** Supports both click-to-select and drag-and-drop. Visual state changes: dashed border becomes gold on drag, green on file selected.
 
 **File validation (`validateFile`):**
+
 - Checks MIME type or file extension against allowed list
 - Checks size ≤ 5 MB
 
 **`handleReview`:**
+
 - Creates `FormData` with field `"contract"`
 - POST to `/api/contracts/review` (multipart)
 - Sets `result` or shows error toast
@@ -598,6 +646,7 @@ This is the bridge between the Home page "مراجعة" button and the reviewer 
 **Filter bar:** Appears after results load. Buttons: "الكل (N)", "خطر (N)", "مراجعة (N)", "آمن (N)". Each colored per its status.
 
 **`handleDownloadReport`:**
+
 - POST to `/api/contracts/export-report` with `{ findings, filename }`
 - Triggers blob download with filename `تقرير-مراجعة-{filename}.docx`
 
@@ -612,12 +661,14 @@ This is the bridge between the Home page "مراجعة" button and the reviewer 
 `info.title` is `"Api"` — **do not change this**. It controls generated file names.
 
 Currently documents only **2 of the 9 routes**:
+
 - `GET /healthz`
 - `POST /contracts/generate` (employment only)
 
 All other routes use `fetch()` directly in the frontend. They are not in the spec yet.
 
 Schemas in the spec:
+
 - `ContractInput` — employment form fields
 - `ContractResult` — `{ contract: string, validationWarnings?: string[] }`
 - `ContractValidationError` — `{ error: string, missingClauses: string[] }`
@@ -631,18 +682,21 @@ This regenerates both `lib/api-zod/src/` and `lib/api-client-react/src/`. Do not
 ### 7.2 `lib/api-zod` — Generated Zod Schemas
 
 Auto-generated from the OpenAPI spec. Key export:
+
 - `GenerateContractBody` — used by the API server to validate employment contract requests
 
 ### 7.3 `lib/api-client-react` — Generated React Query Hooks
 
 Auto-generated from the OpenAPI spec. Key export:
+
 - `useGenerateContract` — used in `Home.tsx` for the employment form submit mutation
 
 ### 7.4 `lib/integrations-anthropic-ai` — Anthropic SDK Wrapper
 
-Exports a single pre-configured `anthropic` client instance. The API key is provided by the Replit Anthropic integration — it is injected into the environment automatically, not stored in code or `.env` files.
+Exports a single pre-configured `anthropic` client instance. The API key is provided by the environment or secret manager, not stored in code.
 
 Usage throughout the codebase:
+
 ```typescript
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 
@@ -663,6 +717,7 @@ Provides the Drizzle ORM client connected to PostgreSQL via `DATABASE_URL`.
 The application is currently fully **stateless** — no contracts, sessions, or users are stored in the database. The DB package is scaffolded and ready for tables when needed.
 
 To add a table:
+
 1. Create `lib/db/src/schema/your-table.ts`
 2. Define the Drizzle table, insert schema, and types
 3. Re-export from `lib/db/src/schema/index.ts`
@@ -771,6 +826,7 @@ User generated a contract on Home.tsx
 `pdf-parse@1.1.1` executes a file read at module load time (it looks for a test PDF). If you import it at the top of a file with `import pdfParse from "pdf-parse"`, the server crashes at startup.
 
 The correct pattern, used in `review.ts`:
+
 ```typescript
 async function getPdfParse() {
   return require("pdf-parse") as (buffer: Buffer) => Promise<{ text: string }>;
@@ -786,6 +842,7 @@ Never change this to a top-level import.
 ### 9.2 Arabic Word Fonts — CRITICAL
 
 Word documents default to Latin fonts for Arabic text unless explicitly configured. The setting that fixes this:
+
 ```typescript
 const FONT = { name: "Times New Roman", hint: "cs" } as const;
 // Applied to every TextRun as: font: FONT
@@ -796,6 +853,7 @@ The `hint: "cs"` means "Complex Script" — it tells Word to use the Arabic rend
 ### 9.3 API Codegen Pipeline
 
 Only the employment contract endpoint is in the OpenAPI spec. The codegen output (`api-zod/` and `api-client-react/`) must NOT be edited manually. After any change to `openapi.yaml`, run:
+
 ```bash
 pnpm --filter @workspace/api-spec run codegen
 ```
@@ -803,15 +861,17 @@ pnpm --filter @workspace/api-spec run codegen
 ### 9.4 Rate Limiter Order
 
 In `app.ts`, the review rate limiter must be registered BEFORE the general contracts rate limiter:
+
 ```typescript
-app.use("/api/contracts/review", reviewRateLimit);   // 5/10min — registered first
-app.use("/api/contracts", contractRateLimit);         // 20/10min — registered second
+app.use("/api/contracts/review", reviewRateLimit); // 5/10min — registered first
+app.use("/api/contracts", contractRateLimit); // 20/10min — registered second
 ```
+
 If reversed, the general limiter would match `/review` first and apply the wrong limit.
 
 ### 9.5 Proxy Path Routing
 
-The Replit shared reverse proxy does NOT rewrite paths. The `api-server` must handle requests at `/api/contracts/...` not `/contracts/...`. All routes in the router are registered with the full path prefix (e.g., `contractsRouter.post("/contracts/generate", ...)`).
+The API server handles requests at `/api/contracts/...` rather than `/contracts/...`. All routes in the router are registered with the full path prefix (e.g., `contractsRouter.post("/contracts/generate", ...)`).
 
 For `curl` tests, always use `localhost:80/api/...` not the service's direct port.
 

@@ -39,17 +39,21 @@ export const contractsTable = pgTable("contracts", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const insertContractSchema = createInsertSchema(contractsTable).omit({ id: true });
+export const insertContractSchema = createInsertSchema(contractsTable).omit({
+  id: true,
+});
 export type InsertContract = z.infer<typeof insertContractSchema>;
 export type Contract = typeof contractsTable.$inferSelect;
 ```
 
 2. Re-export it from `src/schema/index.ts`:
+
 ```ts
 export * from "./contracts";
 ```
 
 3. Push the schema to the database:
+
 ```bash
 pnpm --filter @workspace/db run push
 ```
@@ -58,7 +62,7 @@ pnpm --filter @workspace/db run push
 
 ## Connection
 
-The Drizzle instance is configured in `src/index.ts` using the `DATABASE_URL` environment variable (PostgreSQL connection string provided by Replit).
+The Drizzle instance is configured in `src/index.ts` using the `DATABASE_URL` environment variable (PostgreSQL connection string provided by your environment).
 
 ---
 

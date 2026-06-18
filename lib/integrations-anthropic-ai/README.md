@@ -1,6 +1,6 @@
 # integrations-anthropic-ai — Anthropic SDK Wrapper
 
-Thin wrapper around the Anthropic SDK that provides a pre-configured client instance for use across the monorepo. Credentials are managed by the Replit Anthropic integration — no API key handling in code.
+Thin wrapper around the Anthropic SDK that provides a pre-configured client instance for use across the monorepo. Credentials come from the environment or a secret manager — no API key handling in code.
 
 ---
 
@@ -24,14 +24,11 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 const response = await anthropic.messages.create({
   model: "claude-sonnet-4-6",
   max_tokens: 8192,
-  messages: [
-    { role: "user", content: prompt }
-  ],
+  messages: [{ role: "user", content: prompt }],
 });
 
-const contractText = response.content[0].type === "text"
-  ? response.content[0].text
-  : "";
+const contractText =
+  response.content[0].type === "text" ? response.content[0].text : "";
 ```
 
 ---
@@ -46,4 +43,4 @@ The 8192 token limit is intentional — full contracts with all legal clauses re
 
 ## Credentials
 
-The Anthropic API key is injected automatically by the Replit Anthropic integration. It does not need to be set manually in `.env` or environment secrets.
+The Anthropic API key should be provided by the environment. It does not need to be checked into the repository.

@@ -44,6 +44,30 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
+# Environment Variables
+.env
+.env.local
+.env.*.local
+.env.production.local
+
+# Logs
+lerna-debug.log
+pnpm-debug.log*
+
+# Runtime & Temp
+*.pid
+.vscode-debug.log
+dist/**/*.js
+dist/**/*.css
+
+# OS-specific
+*.swp
+*.swo
+*~
+.DS_Store
+.AppleDouble
+.LSOverride
+
 # Replit
 .cache/
 .local/

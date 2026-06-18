@@ -1,13 +1,15 @@
 # legal-ai — Frontend Application
 
-The user-facing React app for قانوني AI. Served at path `/` via the Replit shared proxy.
+The user-facing React app for قانوني AI. Served at path `/` by the local Vite app.
 
 ---
 
 ## Pages
 
 ### `/` — Contract Generator (Home)
+
 The main page. Users:
+
 1. Pick a contract type (Employment, Rental, Service, NDA, Supplier)
 2. Fill in the relevant form fields
 3. Click "توليد العقد" (Generate Contract)
@@ -18,13 +20,14 @@ The main page. Users:
    - Send directly to the Contract Reviewer
 
 ### `/review` — Contract Reviewer
+
 Users upload a PDF, DOCX, or TXT file (up to 5 MB). The AI analyzes every clause and returns a risk dashboard:
 
-| Color | Meaning |
-|---|---|
-| Green | Clause is compliant and safe |
-| Yellow | Clause needs legal review |
-| Red | Clause is legally risky or missing |
+| Color  | Meaning                            |
+| ------ | ---------------------------------- |
+| Green  | Clause is compliant and safe       |
+| Yellow | Clause needs legal review          |
+| Red    | Clause is legally risky or missing |
 
 Results can be exported as a Word report (`.docx`).
 
@@ -56,13 +59,13 @@ src/
 
 ## Contract Types & Forms
 
-| Type | Key Fields | Party Name Used in Export |
-|---|---|---|
-| Employment (`عقد عمل`) | Employer name, employee name, salary, job title, city | Employee name |
-| Rental (`عقد إيجار`) | Landlord, tenant, property address, rent, duration | Tenant name |
-| Service (`عقد خدمات`) | Client, provider, service description, fee | Client name |
-| NDA (`اتفاقية سرية`) | First party, second party, purpose, duration | First party name |
-| Supplier (`عقد توريد`) | Buyer, supplier, goods description, price | Supplier name |
+| Type                   | Key Fields                                            | Party Name Used in Export |
+| ---------------------- | ----------------------------------------------------- | ------------------------- |
+| Employment (`عقد عمل`) | Employer name, employee name, salary, job title, city | Employee name             |
+| Rental (`عقد إيجار`)   | Landlord, tenant, property address, rent, duration    | Tenant name               |
+| Service (`عقد خدمات`)  | Client, provider, service description, fee            | Client name               |
+| NDA (`اتفاقية سرية`)   | First party, second party, purpose, duration          | First party name          |
+| Supplier (`عقد توريد`) | Buyer, supplier, goods description, price             | Supplier name             |
 
 ---
 
@@ -82,6 +85,7 @@ validationWarnings  → any legal compliance warnings returned by the API
 ## How the "Review This" Button Works
 
 When a contract is generated, a "مراجعة" button appears. Clicking it:
+
 1. Saves `contractText` and `contractTypeLabel` to `sessionStorage`
 2. Navigates to `/review`
 3. `ContractReviewer` runs a `useEffect` on mount, reads `sessionStorage`, and automatically calls `POST /api/contracts/review-text` — no file upload needed
