@@ -40,6 +40,8 @@ export function initApi(): Express {
     throw new Error("SESSION_SECRET must be set for session management.");
   }
 
+  const isProduction = process.env.NODE_ENV === "production";
+
   const PgSession = connectPgSimple(session);
   app.use(
     session({
@@ -48,11 +50,14 @@ export function initApi(): Express {
       secret: sessionSecret,
       resave: false,
       saveUninitialized: false,
-      proxy: true,
+      proxy: isProduction,
       cookie: {
         httpOnly: true,
-        sameSite: "none",
-        secure: true,
+        // Production (Replit): SameSite=None required for cross-site iframe.
+        // Local dev: SameSite=Lax works over plain HTTP and provides built-in
+        // CSRF protection from the browser.
+        sameSite: isProduction ? "none" : "lax",
+        secure: isProduction,
         maxAge: 1000 * 60 * 60 * 24 * 7,
       },
     }),
