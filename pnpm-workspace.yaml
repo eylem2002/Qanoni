@@ -114,7 +114,7 @@ overrides:
   rollup>@rollup/rollup-linux-x64-musl: "-"
   rollup>@rollup/rollup-openbsd-x64: "-"
   rollup>@rollup/rollup-openharmony-arm64: "-"
-  rollup>@rollup/rollup-win32-arm64-msvc: "-"
-  rollup>@rollup/rollup-win32-ia32-msvc: "-"
-  rollup>@rollup/rollup-win32-x64-gnu: "-"
-  rollup>@rollup/rollup-win32-x64-msvc: "-"
+  # rollup>@rollup/rollup-win32-arm64-msvc: "-"   # needed on Windows ARM
+  # rollup>@rollup/rollup-win32-ia32-msvc: "-"   # needed on Windows 32-bit
+  # rollup>@rollup/rollup-win32-x64-gnu: "-"     # needed on Windows 64-bit
+  # rollup>@rollup/rollup-win32-x64-msvc: "-"    # needed on Windows 64-bit (MSVC)
