@@ -8,7 +8,7 @@
    - Falls back to static text when the RAG service is unreachable.
 ══════════════════════════════════════════════════════════ */
 
-import { and, isNull, eq } from "drizzle-orm";
+import { and, isNull, eq, desc } from "drizzle-orm";
 import {
   retrieveArticlesForContract,
   formatArticlesForPrompt,
@@ -19,6 +19,7 @@ import {
   getCached,
   setCached,
   getLastKnownVersionIds,
+  seedVersionIds,
 } from "./ragCache";
 import { db, lawNotificationsTable } from "@workspace/db";
 
@@ -29,6 +30,28 @@ export {
 } from "./lawClient";
 export type { RagArticle, RagRetrievalResult } from "./lawClient";
 export { invalidateCache, getCacheStats } from "./ragCache";
+
+/**
+ * Called once at server startup. Reads the most recent law_notifications row
+ * per contract type and pre-populates the in-memory version-ID map so that
+ * stale-contract checks work correctly even before the first RAG fetch.
+ */
+export async function seedCacheFromDb(): Promise<void> {
+  const rows = await db
+    .selectDistinctOn([lawNotificationsTable.contractType], {
+      contractType: lawNotificationsTable.contractType,
+      newVersionIds: lawNotificationsTable.newVersionIds,
+    })
+    .from(lawNotificationsTable)
+    .orderBy(
+      lawNotificationsTable.contractType,
+      desc(lawNotificationsTable.detectedAt),
+    );
+
+  for (const row of rows) {
+    seedVersionIds(row.contractType, row.newVersionIds);
+  }
+}
 
 interface LawLogger {
   warn: (obj: object, msg: string) => void;

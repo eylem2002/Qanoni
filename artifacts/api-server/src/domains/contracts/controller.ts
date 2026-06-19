@@ -6,6 +6,7 @@ import {
   getContractsForUser,
   getContractForUser,
 } from "./logic/ContractsStore";
+import { getLastKnownVersionIds } from "../../services/law/ragCache";
 import { NotFoundError } from "../../core/errors";
 import {
   buildWordDocument,
@@ -56,7 +57,9 @@ export const listContracts: RequestHandler = async (req, res) => {
   res.json({ contracts });
 };
 
-/** Retrieves one saved contract owned by the authenticated user. */
+/** Retrieves one saved contract owned by the authenticated user.
+    Includes a `stale` flag when the law versions used at generation time
+    differ from the last known versions in the cache. */
 export const getContract: RequestHandler = async (req, res, next) => {
   const userId = req.session.userId!;
   const contract = await getContractForUser(userId, req.params.id as string);
@@ -64,7 +67,18 @@ export const getContract: RequestHandler = async (req, res, next) => {
     next(new NotFoundError("العقد غير موجود"));
     return;
   }
-  res.json({ contract });
+
+  const lawUsed = contract.lawArticlesUsed as { lawVersionIds?: string[] } | null;
+  const savedIds = [...(lawUsed?.lawVersionIds ?? [])].sort();
+  const currentIds = [...getLastKnownVersionIds(contract.contractType)].sort();
+  const stale =
+    currentIds.length > 0 && savedIds.join(",") !== currentIds.join(",");
+
+  res.json({
+    contract,
+    stale,
+    changedLaws: stale ? currentIds.filter((v) => !savedIds.includes(v)) : [],
+  });
 };
 
 export const exportReport: RequestHandler = async (req, res) => {

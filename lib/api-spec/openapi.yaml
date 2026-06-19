@@ -14,6 +14,8 @@ tags:
     description: Arabic legal contract generation
   - name: auth
     description: Account authentication (session cookie)
+  - name: admin
+    description: Admin operations (law change notifications, cache management)
 paths:
   /auth/signup:
     post:
@@ -187,6 +189,61 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/law-changes:
+    get:
+      operationId: listLawChanges
+      tags: [admin]
+      summary: List unacknowledged law version change notifications
+      description: Returns all law_notifications rows that have not yet been acknowledged, plus current in-memory cache stats.
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Unacknowledged law change notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LawChangesResult"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/law-changes/acknowledged:
+    post:
+      operationId: acknowledgeLawChanges
+      tags: [admin]
+      summary: Acknowledge law change notifications and invalidate the RAG cache
+      description: |
+        Marks law change notifications as acknowledged and clears the corresponding
+        in-memory RAG cache entries so the next contract generation fetches fresh
+        law text from the RAG service.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contractType:
+                  type: string
+                  description: If provided, acknowledges only this contract type; otherwise acknowledges all.
+      responses:
+        "200":
+          description: Acknowledged and cache invalidated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcknowledgeResult"
+        "401":
+          description: Not authenticated
           content:
             application/json:
               schema:
@@ -451,8 +508,75 @@ components:
       properties:
         contract:
           $ref: "#/components/schemas/SavedContract"
+        stale:
+          type: boolean
+          description: True when the law versions used at generation time differ from the currently known versions
+        changedLaws:
+          type: array
+          items:
+            type: string
+          description: Law version IDs that are new since the contract was generated (only populated when stale=true)
       required:
         - contract
+        - stale
+        - changedLaws
+    LawNotification:
+      type: object
+      properties:
+        id:
+          type: string
+        contractType:
+          type: string
+        previousVersionIds:
+          type: array
+          items:
+            type: string
+        newVersionIds:
+          type: array
+          items:
+            type: string
+        detectedAt:
+          type: string
+        acknowledgedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - contractType
+        - previousVersionIds
+        - newVersionIds
+        - detectedAt
+    CacheStats:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          expiresAt:
+            type: number
+          fresh:
+            type: boolean
+    LawChangesResult:
+      type: object
+      properties:
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/LawNotification"
+        cacheStats:
+          $ref: "#/components/schemas/CacheStats"
+      required:
+        - changes
+        - cacheStats
+    AcknowledgeResult:
+      type: object
+      properties:
+        acknowledged:
+          type: boolean
+        cacheStats:
+          $ref: "#/components/schemas/CacheStats"
+      required:
+        - acknowledged
+        - cacheStats
     ReviewSummary:
       type: object
       properties:

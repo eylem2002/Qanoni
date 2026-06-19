@@ -20,6 +20,7 @@ export function ContractPreview() {
   const contractType = useAppSelector((s) => s.contract.contractType);
   const partyName = useAppSelector((s) => s.contract.partyName);
   const isGenerating = useAppSelector((s) => s.contract.isGenerating);
+  const stale = useAppSelector((s) => s.contract.stale);
 
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -120,6 +121,15 @@ export function ContractPreview() {
           </Box>
         )}
       </Box>
+
+      {stale && !isGenerating && (
+        <Box sx={{ borderBottom: "1px solid", borderColor: "hsl(48 96% 53% / 0.4)", bgcolor: "hsl(48 96% 53% / 0.08)", px: 2.5, py: 1.5, display: "flex", alignItems: "flex-start", gap: 1 }}>
+          <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2, color: "hsl(48 96% 70%)" }} />
+          <Typography sx={{ fontSize: 12, color: "hsl(48 96% 75%)", lineHeight: 1.6 }}>
+            هذا العقد مبني على نسخة قديمة من القانون. يُنصح بإعادة توليد العقد للتأكد من توافقه مع التعديلات القانونية الأخيرة.
+          </Typography>
+        </Box>
+      )}
 
       {validationWarnings.length > 0 && !isGenerating && (
         <Box sx={{ borderBottom: "1px solid", borderColor: "hsl(43 96% 56% / 0.3)", bgcolor: "hsl(43 96% 56% / 0.08)", px: 2.5, py: 1.5 }}>

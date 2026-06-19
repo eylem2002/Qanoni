@@ -144,3 +144,44 @@ export async function exportContractWord(body: {
   if (!res.ok) throw new Error("export-word failed");
   return res.blob();
 }
+
+// ── Saved-contract helpers ────────────────────────────────────────────────────
+
+export interface SavedContractSummary {
+  id: string;
+  contractType: string;
+  createdAt: string;
+}
+
+export interface SavedContractDetail {
+  contract: {
+    id: string;
+    contractType: string;
+    generatedText: string;
+    inputData: Record<string, unknown> | null;
+    createdAt: string;
+  };
+  stale: boolean;
+  changedLaws: string[];
+}
+
+export async function fetchSavedContracts(): Promise<SavedContractSummary[]> {
+  const res = await fetch("/api/contracts", { credentials: "include" });
+  if (!res.ok) return [];
+  const data = await res.json() as { contracts: SavedContractSummary[] };
+  return data.contracts ?? [];
+}
+
+export async function fetchSavedContract(id: string): Promise<SavedContractDetail | null> {
+  const res = await fetch(`/api/contracts/${id}`, { credentials: "include" });
+  if (!res.ok) return null;
+  return res.json() as Promise<SavedContractDetail>;
+}
+
+/** Returns the number of unacknowledged law-change notifications. */
+export async function fetchLawChangeCount(): Promise<number> {
+  const res = await fetch("/api/admin/law-changes", { credentials: "include" });
+  if (!res.ok) return 0;
+  const data = await res.json() as { changes: unknown[] };
+  return (data.changes ?? []).length;
+}

@@ -9,6 +9,10 @@ interface CacheEntry {
 
 const store = new Map<string, CacheEntry>();
 
+// Populated at startup from law_notifications DB rows so stale-contract checks
+// work correctly even before the first RAG fetch after a server restart.
+const seededVersionIds = new Map<string, string[]>();
+
 export function getCached(contractType: string): RagRetrievalResult | null {
   const entry = store.get(contractType);
   if (!entry || Date.now() > entry.expiresAt) return null;
@@ -16,9 +20,21 @@ export function getCached(contractType: string): RagRetrievalResult | null {
 }
 
 /** Returns the last known version IDs even if the cache entry has expired.
-    Used by LawService to detect law version changes across refreshes. */
+    Falls back to DB-seeded values so cold-start stale checks are reliable. */
 export function getLastKnownVersionIds(contractType: string): string[] {
-  return store.get(contractType)?.result.lawVersionIds ?? [];
+  return (
+    store.get(contractType)?.result.lawVersionIds ??
+    seededVersionIds.get(contractType) ??
+    []
+  );
+}
+
+/** Seeds version IDs from the DB at startup without warming the TTL cache.
+    Skipped if the live cache already has an entry for this contractType. */
+export function seedVersionIds(contractType: string, versionIds: string[]): void {
+  if (!seededVersionIds.has(contractType)) {
+    seededVersionIds.set(contractType, versionIds);
+  }
 }
 
 export function setCached(contractType: string, result: RagRetrievalResult): void {

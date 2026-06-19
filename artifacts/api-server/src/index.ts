@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./core/logger";
+import { seedCacheFromDb } from "./services/law/LawService";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,8 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  seedCacheFromDb().catch((e) =>
+    logger.warn({ err: e }, "Failed to seed law version cache from DB — stale checks will be cold until first RAG fetch"),
+  );
 });
