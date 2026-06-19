@@ -32,6 +32,8 @@ export async function loadArticles(
   articlesText: string;
   lawWarnings: string[];
   articles: RagArticle[];
+  lawVersionIds: string[];
+  retrievedAt: string | null;
 }> {
   const lawWarnings: string[] = [];
   try {
@@ -40,6 +42,8 @@ export async function loadArticles(
       articlesText: formatArticlesForPrompt(ragResult.articles),
       lawWarnings,
       articles: ragResult.articles,
+      lawVersionIds: ragResult.lawVersionIds,
+      retrievedAt: ragResult.retrievedAt,
     };
   } catch (error) {
     log.warn(
@@ -49,6 +53,12 @@ export async function loadArticles(
     lawWarnings.push(
       "تحذير: تم استخدام نصوص قانونية محفوظة لأن نظام القوانين غير متاح.",
     );
-    return { articlesText: fallbackText, lawWarnings, articles: [] };
+    return {
+      articlesText: fallbackText,
+      lawWarnings,
+      articles: [],
+      lawVersionIds: [],
+      retrievedAt: null,
+    };
   }
 }

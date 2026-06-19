@@ -58,11 +58,8 @@ export async function prepareGeneration(
   const data = sanitizeObject(body);
   config.guard?.(data);
 
-  const { articlesText, lawWarnings, articles } = await loadArticles(
-    config.type,
-    log,
-    config.fallbackLaw,
-  );
+  const { articlesText, lawWarnings, articles, lawVersionIds, retrievedAt } =
+    await loadArticles(config.type, log, config.fallbackLaw);
 
   const validate = (assembled: string): ValidationResult => {
     const { valid, missing } = verifyRequiredPhrases(
@@ -80,7 +77,7 @@ export async function prepareGeneration(
     articlesText,
     validate,
     lawWarnings,
-    lawArticlesUsed: articles,
+    lawArticlesUsed: { lawVersionIds, retrievedAt, articles },
     errorLabel: config.errorLabel,
     incompleteError: config.incompleteError,
     failureError: config.failureError,

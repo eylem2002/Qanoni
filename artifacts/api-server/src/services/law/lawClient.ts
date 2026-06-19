@@ -27,7 +27,7 @@ const LAW_SYSTEM_TIMEOUT_MS = 8000;
 
 export async function retrieveArticlesForContract(
   contractType: string,
-  lawSystemBaseUrl: string = process.env.LAW_SYSTEM_URL || "http://localhost:8080"
+  lawSystemBaseUrl: string = process.env.RAG_BASE_URL || "http://localhost:8080"
 ): Promise<RagRetrievalResult> {
   const url = new URL(`${lawSystemBaseUrl}/api/rag/retrieve`);
   url.searchParams.set("contractType", contractType);
