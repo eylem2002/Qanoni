@@ -181,17 +181,17 @@ export async function streamHybridContract<T>(
   };
   res.on("close", onClose);
 
-  const stream = await openai.chat.completions.create(
-    {
-      model: AI_MODEL,
-      max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: prompt }],
-      stream: true,
-    },
-    { signal: controller.signal },
-  );
-
   try {
+    const stream = await openai.chat.completions.create(
+      {
+        model: AI_MODEL,
+        max_tokens: MAX_TOKENS,
+        messages: [{ role: "user", content: prompt }],
+        stream: true,
+      },
+      { signal: controller.signal },
+    );
+
     let raw = "";
     for await (const chunk of stream) {
       const text = chunk.choices[0]?.delta?.content ?? "";
