@@ -168,10 +168,10 @@ export function ReviewerPortal() {
 
   const filterPills = (["all", "red", "yellow", "green"] as const).map((f) => {
     const label =
-      f === "all" ? `الكل (${result!.findings.length})` :
-      f === "red" ? `خطر (${counts!.red})` :
-      f === "yellow" ? `مراجعة (${counts!.yellow})` :
-      `آمن (${counts!.green})`;
+      f === "all" ? `الكل (${result?.findings.length ?? 0})` :
+      f === "red" ? `خطر (${counts?.red ?? 0})` :
+      f === "yellow" ? `مراجعة (${counts?.yellow ?? 0})` :
+      `آمن (${counts?.green ?? 0})`;
     const color =
       f === "all" ? "rgba(255,255,255,0.6)" :
       STATUS_CONFIG[f].color;
