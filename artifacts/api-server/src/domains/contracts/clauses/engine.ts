@@ -1,6 +1,11 @@
 import type { Request, Response } from "express";
 import { openai } from "../../../infra/anthropic";
 import { type ContractTemplate, getAllClauses } from "./types";
+import {
+  reviewContract,
+  fixContract,
+  type ReviewIssue,
+} from "../logic/ContractReviewAgent";
 
 const AI_MODEL = "gpt-4o";
 const MAX_TOKENS = 8192;
@@ -196,37 +201,135 @@ export async function streamFullContract<T>(
 
     const sections = parseSections(raw);
     const assembled = assembleContract(opts.template, opts.data, sections);
-    const fullText = opts.ragDisclaimer
-      ? `${assembled}\n\n${opts.ragDisclaimer}`
-      : assembled;
     const result = opts.validate(assembled);
 
     const missingRequired = missingRequiredSections(opts.template, sections);
-    const valid = result.valid && missingRequired.length === 0;
+    const initialValid = result.valid && missingRequired.length === 0;
     const missingClauses = [...result.missingClauses, ...missingRequired];
+    const baseWarnings = [...result.warnings, ...opts.lawWarnings];
 
-    if (!valid) {
+    if (!initialValid) {
       write({
         type: "done",
         valid: false,
         error: opts.incompleteError,
         missingClauses,
-        validationWarnings: [...result.warnings, ...opts.lawWarnings],
+        confidence: 0,
+        validationWarnings: baseWarnings,
       });
+      if (opts.onComplete) {
+        try {
+          await opts.onComplete({ valid: false, contract: undefined, missingClauses });
+        } catch (persistErr) {
+          req.log.error({ err: persistErr }, "Failed to persist contract");
+        }
+      }
     } else {
-      write({
-        type: "done",
-        valid: true,
-        contract: fullText,
-        validationWarnings: [...result.warnings, ...opts.lawWarnings],
-      });
-    }
+      // ── Review Agent ──────────────────────────────────────────────────────
+      // Primary source for citation verification: lob.gov.jo articles via RAG
+      // (articlesText). Agent failure never blocks delivery.
+      let finalAssembled = assembled;
+      let agentPassed = true;
+      let agentWarnings: string[] = [];
+      let agentCriticalIssues: ReviewIssue[] = [];
+      let confidence = 80;
+      let autoFixed = false;
 
-    if (opts.onComplete) {
       try {
-        await opts.onComplete({ valid, contract: fullText, missingClauses });
-      } catch (persistErr) {
-        req.log.error({ err: persistErr }, "Failed to persist contract");
+        const review = await reviewContract(assembled, opts.articlesText);
+        confidence = review.confidence;
+        agentPassed = review.passed;
+        agentWarnings = review.issues
+          .filter((i) => i.severity === "warning")
+          .map((i) => `${i.clause}: ${i.issue}`);
+        agentCriticalIssues = review.issues.filter((i) => i.severity === "critical");
+
+        req.log.info(
+          {
+            contractType: opts.template.type,
+            passed: review.passed,
+            issueCount: review.issues.length,
+            confidence: review.confidence,
+            autoFixed: false,
+          },
+          "[ReviewAgent] Initial review",
+        );
+
+        if (!review.passed) {
+          const fixedText = await fixContract(
+            assembled,
+            opts.articlesText,
+            agentCriticalIssues,
+          );
+          const fixReview = await reviewContract(fixedText, opts.articlesText);
+
+          autoFixed = fixReview.passed;
+          confidence = fixReview.confidence;
+          agentPassed = fixReview.passed;
+          agentWarnings = fixReview.issues
+            .filter((i) => i.severity === "warning")
+            .map((i) => `${i.clause}: ${i.issue}`);
+          agentCriticalIssues = fixReview.issues.filter((i) => i.severity === "critical");
+
+          if (fixReview.passed) {
+            finalAssembled = fixedText;
+          }
+
+          req.log.info(
+            {
+              contractType: opts.template.type,
+              passed: fixReview.passed,
+              issueCount: fixReview.issues.length,
+              confidence: fixReview.confidence,
+              autoFixed,
+            },
+            "[ReviewAgent] After fix pass",
+          );
+        }
+      } catch (reviewErr) {
+        req.log.warn(
+          { err: reviewErr },
+          "[ReviewAgent] Review agent failed — proceeding without agent check",
+        );
+        agentPassed = true;
+        confidence = 80;
+      }
+      // ── End Review Agent ──────────────────────────────────────────────────
+
+      const finalFullText = opts.ragDisclaimer
+        ? `${finalAssembled}\n\n${opts.ragDisclaimer}`
+        : finalAssembled;
+      const allWarnings = [...baseWarnings, ...agentWarnings];
+
+      if (!agentPassed) {
+        write({
+          type: "done",
+          valid: false,
+          error: opts.failureError,
+          confidence,
+          issues: agentCriticalIssues,
+          validationWarnings: allWarnings,
+        });
+      } else {
+        write({
+          type: "done",
+          valid: true,
+          contract: finalFullText,
+          confidence,
+          validationWarnings: allWarnings,
+        });
+      }
+
+      if (opts.onComplete) {
+        try {
+          await opts.onComplete({
+            valid: agentPassed,
+            contract: agentPassed ? finalFullText : undefined,
+            missingClauses,
+          });
+        } catch (persistErr) {
+          req.log.error({ err: persistErr }, "Failed to persist contract");
+        }
       }
     }
 
