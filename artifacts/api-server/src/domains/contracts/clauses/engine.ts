@@ -149,6 +149,7 @@ export async function streamHybridContract<T>(
     articlesText: string;
     validate: (assembled: string) => ValidationResult;
     lawWarnings: string[];
+    ragDisclaimer?: string;
     errorLabel: string;
     incompleteError: string;
     failureError: string;
@@ -206,6 +207,12 @@ export async function streamHybridContract<T>(
 
     const sections = parseSections(raw);
     const assembled = assembleContract(opts.template, opts.data, sections);
+    // Append the RAG source disclaimer after the template's own disclaimer.
+    const fullText = opts.ragDisclaimer
+      ? `${assembled}\n\n${opts.ragDisclaimer}`
+      : assembled;
+    // Validate on the assembled body (before the appended disclaimer) so the
+    // required-phrase checks aren't sensitive to disclaimer wording changes.
     const result = opts.validate(assembled);
 
     // A required variable clause the model failed to draft renders as a
@@ -226,7 +233,7 @@ export async function streamHybridContract<T>(
       write({
         type: "done",
         valid: true,
-        contract: assembled,
+        contract: fullText,
         validationWarnings: [...result.warnings, ...opts.lawWarnings],
       });
     }
@@ -235,7 +242,7 @@ export async function streamHybridContract<T>(
     // can never corrupt or block the stream the client already received.
     if (opts.onComplete) {
       try {
-        await opts.onComplete({ valid, contract: assembled, missingClauses });
+        await opts.onComplete({ valid, contract: fullText, missingClauses });
       } catch (persistErr) {
         req.log.error({ err: persistErr }, "Failed to persist contract");
       }

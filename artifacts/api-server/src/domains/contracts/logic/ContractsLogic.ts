@@ -20,6 +20,7 @@ export interface GenerationPlan {
   validate: (assembled: string) => ValidationResult;
   lawWarnings: string[];
   lawArticlesUsed: unknown;
+  ragDisclaimer?: string;
   errorLabel: string;
   incompleteError: string;
   failureError: string;
@@ -58,8 +59,14 @@ export async function prepareGeneration(
   const data = sanitizeObject(body);
   config.guard?.(data);
 
-  const { articlesText, lawWarnings, articles, lawVersionIds, retrievedAt } =
-    await loadArticles(config.type, log, config.fallbackLaw);
+  const {
+    articlesText,
+    lawWarnings,
+    articles,
+    lawVersionIds,
+    retrievedAt,
+    ragDisclaimer,
+  } = await loadArticles(config.type, log, config.fallbackLaw);
 
   const validate = (assembled: string): ValidationResult => {
     const { valid, missing } = verifyRequiredPhrases(
@@ -78,6 +85,7 @@ export async function prepareGeneration(
     validate,
     lawWarnings,
     lawArticlesUsed: { lawVersionIds, retrievedAt, articles },
+    ragDisclaimer,
     errorLabel: config.errorLabel,
     incompleteError: config.incompleteError,
     failureError: config.failureError,
