@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import { streamHybridContract } from "./clauses";
+import { streamFullContract as streamHybridContract } from "./clauses";
 import { prepareGeneration } from "./logic/ContractsLogic";
 import {
   persistContract,
